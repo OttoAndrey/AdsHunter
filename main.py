@@ -18,6 +18,7 @@ class MyWin(QtWidgets.QMainWindow):
         self.searchers = []
         self.methods_of_screen = []
         self.browser = None
+        self.options = None
         self.save_path = None
 
         # Назначаем кнопке Старт функцию start
@@ -38,13 +39,14 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui.checkBox_JustAd.clicked.connect(self.settings_just_ad)
 
         # Значения элементов интерфейса по умолчанию
+        self.ui.label_WaitFinish.setText('Нажмите "Начать" для выполнения программы, но придется подождать...')
         # self.ui.checkBox_Yandex.setChecked(True)
         # self.ui.radioButton_Firefox.setChecked(True)
         # self.ui.checkBox_AllResults.setChecked(True)
 
         # Заглушки, пока функционал не готов
         self.ui.checkBox_Google.setDisabled(True)
-        self.ui.radioButton_GoogleChrome.setDisabled(True)
+        # self.ui.radioButton_GoogleChrome.setDisabled(True)
         self.ui.checkBox_BlockOfAds.setDisabled(True)
         self.ui.checkBox_JustAd.setDisabled(True)
         self.ui.checkBox_AddTimeDateToScreen.setDisabled(True)
@@ -94,6 +96,9 @@ class MyWin(QtWidgets.QMainWindow):
     def set_browser(self):
         if self.ui.radioButton_GoogleChrome.isChecked():
             self.browser = webdriver.Chrome
+            self.options = webdriver.ChromeOptions()
+            self.options.add_argument('headless')
+            self.options.add_argument('window-size=800x3800')
         else:
             self.browser = webdriver.Firefox
 
@@ -118,6 +123,7 @@ class MyWin(QtWidgets.QMainWindow):
 
     # Функция срабатывает при нажатии на кнопку Старт
     def start(self):
+        self.ui.label_WaitFinish.setText('Программа выполняется. Подождите...')
         print('Текущие настройки:')
         print(self.searchers)
         print(self.browser)
@@ -142,8 +148,10 @@ class MyWin(QtWidgets.QMainWindow):
 
         '''Начинаем перебирать системы поиска, затем открываем бразуер, формируем запрос,
         на странцие ищем рекламу, и если находим перебираем список с методами нарезки скринов'''
+
         for url in self.searchers:
-            driver = self.browser()
+            options = self.options
+            driver = self.browser(options=options)
 
             # TODO продумать как изменять search. Когда ищет по яндексу должен быть yandex, когда по гуглу должен быть google
             search = 'yandex'
@@ -164,6 +172,8 @@ class MyWin(QtWidgets.QMainWindow):
                         all_results = driver.find_element_by_class_name('main')
                         for screen_cut in self.methods_of_screen:
                             screen_cut(all_results, folder_path, search, request, site_address)
+        driver.close()
+        self.ui.label_WaitFinish.setText('Готово! ( ͡° ͜ʖ ͡°)')
 
 
 if __name__ == "__main__":
