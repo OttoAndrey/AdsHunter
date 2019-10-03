@@ -17,7 +17,7 @@ class Ui_MainWindow(object):
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.pushButton_Start = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_Start.setGeometry(QtCore.QRect(500, 650, 271, 91))
+        self.pushButton_Start.setGeometry(QtCore.QRect(500, 610, 271, 51))
         self.pushButton_Start.setObjectName("pushButton_Start")
         self.groupBox_OtherSettings = QtWidgets.QGroupBox(self.centralwidget)
         self.groupBox_OtherSettings.setGeometry(QtCore.QRect(680, 420, 231, 80))
@@ -77,6 +77,11 @@ class Ui_MainWindow(object):
         self.pushButton_SavePath = QtWidgets.QPushButton(self.groupBox_SavePath)
         self.pushButton_SavePath.setGeometry(QtCore.QRect(10, 20, 271, 31))
         self.pushButton_SavePath.setObjectName("pushButton_SavePath")
+        self.label_WaitFinish = QtWidgets.QLabel(self.centralwidget)
+        self.label_WaitFinish.setGeometry(QtCore.QRect(410, 700, 451, 20))
+        self.label_WaitFinish.setText("")
+        self.label_WaitFinish.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_WaitFinish.setObjectName("label_WaitFinish")
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(MainWindow)
@@ -84,7 +89,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "AdsHunter"))
         self.pushButton_Start.setText(_translate("MainWindow", "Начать"))
         self.groupBox_OtherSettings.setTitle(_translate("MainWindow", "Другие настройки"))
         self.checkBox_AddTimeDateToScreen.setText(_translate("MainWindow", "Добавить дату и время на скрин"))
