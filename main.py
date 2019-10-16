@@ -1,11 +1,12 @@
-from selenium import webdriver
-from PIL import Image
-from time import sleep
-from openpyxl import Workbook, load_workbook
 import os
 import sys
+from datetime import datetime
+
+from PIL import Image, ImageDraw, ImageFont
+from PyQt5 import QtWidgets
+from selenium import webdriver
+
 from interface import *
-from PyQt5 import QtCore, QtGui, QtWidgets
 
 
 class MyWin(QtWidgets.QMainWindow):
@@ -46,7 +47,7 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Заглушки, пока функционал не готов
         self.ui.checkBox_Google.setDisabled(True)
-        # self.ui.radioButton_GoogleChrome.setDisabled(True)
+        self.ui.radioButton_Firefox.setDisabled(True)
         self.ui.checkBox_BlockOfAds.setDisabled(True)
         self.ui.checkBox_JustAd.setDisabled(True)
         self.ui.checkBox_AddTimeDateToScreen.setDisabled(True)
@@ -64,8 +65,8 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui.label_SavePath.setText('Путь: {0}'.format(self.save_path))
 
     # Ф-ии нарезания скриншотов
-    def cut_all_results(self, all_results, folder_path, search, request, site_address):
-        all_results.screenshot('{0}\\{1}_{2}_{3}_{4}'.format(folder_path, search, request, site_address, 'all_results.png'))
+    def cut_all_results(self, driver, folder_path, search, request, site_address):
+        driver.save_screenshot('{0}\\{1}_{2}_{3}_{4}'.format(folder_path, search, request, site_address, 'all_results.png'))
 
     def cut_block_of_ads(self):
         pass
@@ -121,6 +122,86 @@ class MyWin(QtWidgets.QMainWindow):
         user_requests = self.ui.textEdit_Requests.toPlainText().split('\n')
         return user_requests
 
+    # Функция вычисляет позицию сайта относительно блоков спец/сео/гарант
+    def get_site_position(self, mas, site_address):
+        count = 0
+        for index, m in enumerate(mas, start=1):
+            if site_address in m[1]:
+                count = m[0]
+                break
+        if count == 0:
+            index = 0
+
+        return count, index
+
+    #Функция возвращает скрин с нумерацией и рамками
+    def get_edit_screen(self, site_address, screen_name, results):
+        special = []
+        seo = []
+        garant = []
+
+        temp = False
+
+        # Распределяем результаты по массивам
+        for result in results:
+            if 'реклама' in result[1]:
+                if temp:
+                    garant.append(result)
+                else:
+                    special.append(result)
+            else:
+                temp = True
+                seo.append(result)
+
+        special_position = self.get_site_position(special, site_address)
+        seo_position = self.get_site_position(seo, site_address)
+        garant_position = self.get_site_position(garant, site_address)
+
+        positions = [special_position, seo_position, garant_position]
+
+        print(positions)
+
+        # Начинаем работу с изображением
+        image = Image.open(screen_name)
+        draw = ImageDraw.Draw(image)
+        print('ща начну рисовать')
+        # Настройки для ширфта
+        font = ImageFont.truetype('Aegean.ttf', 25)
+
+        # Рисуем дату и время
+        date = datetime.now().strftime('%d.%m.%Y')
+        time = datetime.now().strftime('%H:%M')
+        draw.text((15, 60), time, fill=(255, 0, 0), font=font)
+        draw.text((15, 95), date, fill=(255, 0, 0), font=font)
+        print('нарисовал дату время')
+        # Выделяем рамкой искомые запросы
+        for position in positions:
+            if position[0] != 0:
+                element = results[position[0] - 1]
+                print(element[2])
+                print(element[3])
+                draw.rectangle((element[2]['x'], element[2]['y'], element[2]['x'] + element[3]['width'],
+                                element[2]['y'] + element[3]['height']), outline=(255, 0, 0, 255), width=3, )
+
+        # Рисуем на скрине нумерацию
+        for result in results:
+            draw.text((result[2]['x'] - 100, result[2]['y']), str(result[0]), fill=(0, 0, 0), font=font)
+
+        for index, spcl in enumerate(special, start=1):
+            draw.text((spcl[2]['x'] - 50, spcl[2]['y']), str(index), fill=(255, 0, 0), font=font)
+
+        for index, s in enumerate(seo, start=1):
+            draw.text((s[2]['x'] - 50, s[2]['y']), str(index), fill=(0, 128, 0), font=font)
+
+        for index, g in enumerate(garant, start=1):
+            draw.text((g[2]['x'] - 50, g[2]['y']), str(index), fill=(0, 0, 255), font=font)
+
+        # Конец рисования
+        del draw
+        # image.save('{0}_{1}'.format(screen_name, 'new.png'))
+        image.save(screen_name)
+        print('сохранил нвоый рисунок')
+
     # Функция срабатывает при нажатии на кнопку Старт
     def start(self):
         self.ui.label_WaitFinish.setText('Программа выполняется. Подождите...')
@@ -132,6 +213,7 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Адрес сайта, который ввел пользователь
         # TODO отрезать лишнее: https, www, после ru/com тоже убирать
+        # TODO ну или регулярное выражение, пока не напишет нормально
         site_address = self.ui.lineEdit_SiteAddress.text()
         print(site_address)
 
@@ -148,31 +230,54 @@ class MyWin(QtWidgets.QMainWindow):
 
         '''Начинаем перебирать системы поиска, затем открываем бразуер, формируем запрос,
         на странцие ищем рекламу, и если находим перебираем список с методами нарезки скринов'''
+        options = self.options
 
+
+        # Перебор всех поисковых систем
         for url in self.searchers:
-            options = self.options
-            driver = self.browser(options=options)
 
             # TODO продумать как изменять search. Когда ищет по яндексу должен быть yandex, когда по гуглу должен быть google
             search = 'yandex'
 
+            # Перебор всех поисковых запросов
             for request in user_requests:
+                driver = self.browser(options=options)
                 current_url = url + request
                 driver.get(current_url)
 
                 # Находим все элементы выдачи на странице
                 # TODO продумать этот момент для гугла
-                results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
-
-                # Перебираем результаты и ищем с рекламой и с нашим сайтом
-                for result in results:
+                web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
+                results = []
+                # Перебор реузльтатов выдачи поиска
+                # TODO в каждом результате много данных и в них программа ищет наличие сайта
+                # TODO для оптимищации следует собирать со страницы только адреса, сравнивать их с нашим сайтом (сделать потом)
+                for result in web_results:
                     if 'реклама' in result.text and site_address in result.text:
                         print()
                         print(result.text)
-                        all_results = driver.find_element_by_class_name('main')
-                        for screen_cut in self.methods_of_screen:
-                            screen_cut(all_results, folder_path, search, request, site_address)
-        driver.close()
+
+                        #Собираем всю инфу со страницы
+                        for index, result in enumerate(web_results, start=1):
+                            results.append((index, result.text, result.location, result.size))
+
+                        # Перебор методов нарезания скриншотов
+                        # for screen_cut in self.methods_of_screen:
+                        #     screen_cut(driver, folder_path, search, request, site_address)
+
+                        #TODO тут с именем скриншота. Как его потом вытаскивать из функций
+                        screen_name = '{0}\\{1}_{2}_{3}_{4}'.format(folder_path, search, request, site_address, 'all_results.png')
+                        driver.save_screenshot(screen_name)
+                        # Закрываем, так как для этого запроса браузер нам уже не понадобится
+                        driver.close()
+
+                        #Рисуем на скрине
+                        self.get_edit_screen(site_address, screen_name, results)
+
+                        break
+
+
+
         self.ui.label_WaitFinish.setText('Готово! ( ͡° ͜ʖ ͡°)')
 
 
