@@ -5,7 +5,7 @@ from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 from PyQt5 import QtWidgets
 from selenium import webdriver
-
+from openpyxl import load_workbook
 from interface import *
 
 
@@ -134,8 +134,8 @@ class MyWin(QtWidgets.QMainWindow):
 
         return count, index
 
-    #Функция возвращает скрин с нумерацией и рамками
-    def get_edit_screen(self, site_address, screen_name, results):
+    #Функция для определения позиций в спец/seo/гарант
+    def get_positions(self, results, site_address):
         special = []
         seo = []
         garant = []
@@ -158,9 +158,11 @@ class MyWin(QtWidgets.QMainWindow):
         garant_position = self.get_site_position(garant, site_address)
 
         positions = [special_position, seo_position, garant_position]
+        block_of_ads = [special, seo, garant]
+        return positions, block_of_ads
 
-        print(positions)
-
+    #Функция возвращает скрин с нумерацией и рамками
+    def edit_screen(self, site_address, screen_name, results, positions, block_of_ads):
         # Начинаем работу с изображением
         image = Image.open(screen_name)
         draw = ImageDraw.Draw(image)
@@ -187,13 +189,13 @@ class MyWin(QtWidgets.QMainWindow):
         for result in results:
             draw.text((result[2]['x'] - 100, result[2]['y']), str(result[0]), fill=(0, 0, 0), font=font)
 
-        for index, spcl in enumerate(special, start=1):
+        for index, spcl in enumerate(block_of_ads[0], start=1):
             draw.text((spcl[2]['x'] - 50, spcl[2]['y']), str(index), fill=(255, 0, 0), font=font)
 
-        for index, s in enumerate(seo, start=1):
+        for index, s in enumerate(block_of_ads[1], start=1):
             draw.text((s[2]['x'] - 50, s[2]['y']), str(index), fill=(0, 128, 0), font=font)
 
-        for index, g in enumerate(garant, start=1):
+        for index, g in enumerate(block_of_ads[2], start=1):
             draw.text((g[2]['x'] - 50, g[2]['y']), str(index), fill=(0, 0, 255), font=font)
 
         # Конец рисования
@@ -201,6 +203,32 @@ class MyWin(QtWidgets.QMainWindow):
         # image.save('{0}_{1}'.format(screen_name, 'new.png'))
         image.save(screen_name)
         print('сохранил нвоый рисунок')
+
+    #Функция для создания файла по экселю и записи в него статистики
+    def edit_file_stat(self, site_address, user_requests, statistics, folder_path):
+        # Открываем шаблон файл экселя для записи статистики
+        wb = load_workbook('template.xlsx')
+        sheet = wb.active
+        sheet['A3'].value = site_address
+
+        start = 'B3'
+        end = 'F{0}'.format(len(user_requests) + 3)
+
+        for cellObj, stat in zip(sheet[start:end], statistics):
+            for index, (cell, s) in enumerate(zip(cellObj, stat)):
+
+                if index == 0:
+                    cell.value = s
+
+                elif index == 1 or index == 2 or index == 3:
+                    cell.value = s[1]
+                elif index == 4:
+                    cell.value = s
+                    cell.hyperlink = s
+                    cell.style = 'Hyperlink'
+
+        wb.save('{0}\\{1}.xlsx'.format(folder_path, site_address))
+
 
     # Функция срабатывает при нажатии на кнопку Старт
     def start(self):
@@ -228,10 +256,12 @@ class MyWin(QtWidgets.QMainWindow):
         if not os.path.exists(folder_path):
             os.mkdir(folder_path)
 
+        #Массив для сбора статистики (спец, сео, гарант)
+        statistics = []
+
         '''Начинаем перебирать системы поиска, затем открываем бразуер, формируем запрос,
         на странцие ищем рекламу, и если находим перебираем список с методами нарезки скринов'''
         options = self.options
-
 
         # Перебор всех поисковых систем
         for url in self.searchers:
@@ -241,17 +271,21 @@ class MyWin(QtWidgets.QMainWindow):
 
             # Перебор всех поисковых запросов
             for request in user_requests:
+                results = []
+                positions = [(0, 0), (0, 0), (0, 0)]
+                screen_name = 'Результатов нет'
+
                 driver = self.browser(options=options)
                 current_url = url + request
                 driver.get(current_url)
 
-                # Находим все элементы выдачи на странице
                 # TODO продумать этот момент для гугла
+                # Находим все элементы выдачи на странице
                 web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
-                results = []
-                # Перебор реузльтатов выдачи поиска
+
                 # TODO в каждом результате много данных и в них программа ищет наличие сайта
                 # TODO для оптимищации следует собирать со страницы только адреса, сравнивать их с нашим сайтом (сделать потом)
+                # Перебор реузльтатов выдачи поиска
                 for result in web_results:
                     if 'реклама' in result.text and site_address in result.text:
                         print()
@@ -271,11 +305,22 @@ class MyWin(QtWidgets.QMainWindow):
                         # Закрываем, так как для этого запроса браузер нам уже не понадобится
                         driver.close()
 
-                        #Рисуем на скрине
-                        self.get_edit_screen(site_address, screen_name, results)
+                        positions, block_of_ads = self.get_positions(results, site_address)
 
+                        #Рисуем на скрине
+                        self.edit_screen(site_address, screen_name, results, positions, block_of_ads)
                         break
 
+                #Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
+                spec = positions[0]
+                seo = positions[1]
+                garant = positions[2]
+
+                #Добавляем данные в один большой, чтобы потом записать всё в эксель файл
+                statistics.append((request, spec, seo, garant, screen_name))
+
+        #Записываем статистику в файл
+        self.edit_file_stat(site_address, user_requests, statistics, folder_path)
 
 
         self.ui.label_WaitFinish.setText('Готово! ( ͡° ͜ʖ ͡°)')
