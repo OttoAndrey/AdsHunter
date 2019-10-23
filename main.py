@@ -3,10 +3,20 @@ import sys
 from datetime import datetime
 
 from PIL import Image, ImageDraw, ImageFont
-from PyQt5 import QtWidgets
-from selenium import webdriver
+from PyQt5.QtCore import QThread
 from openpyxl import load_workbook
+from selenium import webdriver
+
 from interface import *
+
+
+class SearchThread(QThread):
+    def __init__(self, mainwindow):
+        QThread.__init__(self)
+        self.mainwindow = mainwindow
+
+    def run(self):
+        self.mainwindow.start_searching()
 
 
 class MyWin(QtWidgets.QMainWindow):
@@ -15,6 +25,9 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
+        # Экземпляр потока
+        self.thread_instance = SearchThread(self)
+
         # Для хранения систем, где будем производить поиск
         self.searchers = []
         self.methods_of_screen = []
@@ -22,8 +35,8 @@ class MyWin(QtWidgets.QMainWindow):
         self.options = None
         self.save_path = None
 
-        # Назначаем кнопке Старт функцию start
-        self.ui.pushButton_Start.clicked.connect(self.start)
+        # Назначаем кнопке Старт функцию start_search, которая отвечает за запуск метода run() в классе потока
+        self.ui.pushButton_Start.clicked.connect(self.start_search)
         self.ui.pushButton_SavePath.clicked.connect(self.get_save_path)
 
         # Назначаем на клик по чекбоксу функции, которые добавляют/убирают из списка поиск в системах
@@ -47,10 +60,9 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Заглушки, пока функционал не готов
         self.ui.checkBox_Google.setDisabled(True)
-        self.ui.radioButton_Firefox.setDisabled(True)
+        # self.ui.radioButton_Firefox.setDisabled(True)
         self.ui.checkBox_BlockOfAds.setDisabled(True)
         self.ui.checkBox_JustAd.setDisabled(True)
-        self.ui.checkBox_AddTimeDateToScreen.setDisabled(True)
 
         # Временный текст
         self.ui.textEdit_Requests.setText("""смартфоны купить
@@ -62,7 +74,6 @@ class MyWin(QtWidgets.QMainWindow):
     # Ф-ия присваивает переменным путь, который задаёт пользователь
     def get_save_path(self):
         self.save_path = QtWidgets.QFileDialog.getExistingDirectory()
-        self.ui.label_SavePath.setText('Путь: {0}'.format(self.save_path))
 
     # Ф-ии нарезания скриншотов
     def cut_all_results(self, driver, folder_path, search, request, site_address):
@@ -134,7 +145,7 @@ class MyWin(QtWidgets.QMainWindow):
 
         return count, index
 
-    #Функция для определения позиций в спец/seo/гарант
+    # Функция для определения позиций в спец/seo/гарант
     def get_positions(self, results, site_address):
         special = []
         seo = []
@@ -161,8 +172,8 @@ class MyWin(QtWidgets.QMainWindow):
         block_of_ads = [special, seo, garant]
         return positions, block_of_ads
 
-    #Функция возвращает скрин с нумерацией и рамками
-    def edit_screen(self, site_address, screen_name, results, positions, block_of_ads):
+    # Функция возвращает скрин с нумерацией и рамками
+    def edit_screen(self, screen_name, results, positions, block_of_ads):
         # Начинаем работу с изображением
         image = Image.open(screen_name)
         draw = ImageDraw.Draw(image)
@@ -171,10 +182,12 @@ class MyWin(QtWidgets.QMainWindow):
         font = ImageFont.truetype('Aegean.ttf', 25)
 
         # Рисуем дату и время
-        date = datetime.now().strftime('%d.%m.%Y')
-        time = datetime.now().strftime('%H:%M')
-        draw.text((15, 60), time, fill=(255, 0, 0), font=font)
-        draw.text((15, 95), date, fill=(255, 0, 0), font=font)
+        if self.ui.checkBox_AddTimeDateToScreen.isChecked():
+            date = datetime.now().strftime('%d.%m.%Y')
+            time = datetime.now().strftime('%H:%M')
+            draw.text((15, 60), time, fill=(255, 0, 0), font=font)
+            draw.text((15, 95), date, fill=(255, 0, 0), font=font)
+
         print('нарисовал дату время')
         # Выделяем рамкой искомые запросы
         for position in positions:
@@ -204,7 +217,7 @@ class MyWin(QtWidgets.QMainWindow):
         image.save(screen_name)
         print('сохранил нвоый рисунок')
 
-    #Функция для создания файла по экселю и записи в него статистики
+    # Функция для создания файла по экселю и записи в него статистики
     def edit_file_stat(self, site_address, user_requests, statistics, folder_path):
         # Открываем шаблон файл экселя для записи статистики
         wb = load_workbook('template.xlsx')
@@ -229,9 +242,11 @@ class MyWin(QtWidgets.QMainWindow):
 
         wb.save('{0}\\{1}.xlsx'.format(folder_path, site_address))
 
+    def start_search(self):
+        self.thread_instance.start()
 
     # Функция срабатывает при нажатии на кнопку Старт
-    def start(self):
+    def start_searching(self):
         self.ui.label_WaitFinish.setText('Программа выполняется. Подождите...')
         print('Текущие настройки:')
         print(self.searchers)
@@ -253,10 +268,11 @@ class MyWin(QtWidgets.QMainWindow):
         # TODO брать с путь с интерфейса, который указал пользователь
         # folder_path = 'C:\\Users\\{0}\\Desktop\\'.format(os.getlogin()) + site_address
         folder_path = '{0}\\{1}'.format(self.save_path, site_address)
+        self.ui.label_SavePath.setText('Путь: {0}'.format(folder_path))
         if not os.path.exists(folder_path):
             os.mkdir(folder_path)
 
-        #Массив для сбора статистики (спец, сео, гарант)
+        # Массив для сбора статистики (спец, сео, гарант)
         statistics = []
 
         '''Начинаем перебирать системы поиска, затем открываем бразуер, формируем запрос,
@@ -265,18 +281,20 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Перебор всех поисковых систем
         for url in self.searchers:
-
             # TODO продумать как изменять search. Когда ищет по яндексу должен быть yandex, когда по гуглу должен быть google
             search = 'yandex'
 
             # Перебор всех поисковых запросов
             for request in user_requests:
                 results = []
+
+                # Лист для позиций искомого сайта в выдаче
+                # Первое число позиция по всем запросам, второе относительно блока в котором находится
                 positions = [(0, 0), (0, 0), (0, 0)]
                 screen_name = 'Результатов нет'
-
-                driver = self.browser(options=options)
                 current_url = url + request
+
+                driver = self.browser(options=options) #options=options
                 driver.get(current_url)
 
                 # TODO продумать этот момент для гугла
@@ -291,7 +309,7 @@ class MyWin(QtWidgets.QMainWindow):
                         print()
                         print(result.text)
 
-                        #Собираем всю инфу со страницы
+                        # Собираем всю инфу со страницы
                         for index, result in enumerate(web_results, start=1):
                             results.append((index, result.text, result.location, result.size))
 
@@ -299,29 +317,38 @@ class MyWin(QtWidgets.QMainWindow):
                         # for screen_cut in self.methods_of_screen:
                         #     screen_cut(driver, folder_path, search, request, site_address)
 
-                        #TODO тут с именем скриншота. Как его потом вытаскивать из функций
+                        # TODO тут с именем скриншота. Как его потом вытаскивать из функций
                         screen_name = '{0}\\{1}_{2}_{3}_{4}'.format(folder_path, search, request, site_address, 'all_results.png')
+                        print(screen_name)
+
+                        # Блок кода, чтобы делать скрин рабочего стола
+                        # wr = driver.find_element_by_xpath('//li[@class="serp-item"][2]')
+                        # driver.execute_script('arguments[0].scrollIntoView();', wr)
+                        # sleep(3)
+                        # bitmap = autopy.bitmap.capture_screen()
+                        # bitmap.save('screen.png')
+
                         driver.save_screenshot(screen_name)
                         # Закрываем, так как для этого запроса браузер нам уже не понадобится
                         driver.close()
 
                         positions, block_of_ads = self.get_positions(results, site_address)
 
-                        #Рисуем на скрине
-                        self.edit_screen(site_address, screen_name, results, positions, block_of_ads)
+                        # Рисуем на скрине
+                        self.edit_screen(screen_name, results, positions, block_of_ads)
                         break
 
-                #Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
+                # Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
                 spec = positions[0]
                 seo = positions[1]
                 garant = positions[2]
 
-                #Добавляем данные в один большой, чтобы потом записать всё в эксель файл
+                # Добавляем данные в один большой, чтобы потом записать всё в эксель файл
                 statistics.append((request, spec, seo, garant, screen_name))
 
-        #Записываем статистику в файл
+        # Записываем статистику в файл
+        self.ui.label_WaitFinish.setText('Собираю статистику в файл, ща закончу...')
         self.edit_file_stat(site_address, user_requests, statistics, folder_path)
-
 
         self.ui.label_WaitFinish.setText('Готово! ( ͡° ͜ʖ ͡°)')
 
