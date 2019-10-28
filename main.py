@@ -5,6 +5,7 @@ from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 from PyQt5.QtCore import QThread
 from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
 from selenium import webdriver
 
 from interface import *
@@ -16,6 +17,7 @@ class SearchThread(QThread):
         self.mainwindow = mainwindow
 
     def run(self):
+        # Запуск функции поиска
         self.mainwindow.start_searching()
 
 
@@ -28,12 +30,12 @@ class MyWin(QtWidgets.QMainWindow):
         # Экземпляр потока
         self.thread_instance = SearchThread(self)
 
-        # Для хранения систем, где будем производить поиск
-        self.searchers = []
-        self.methods_of_screen = []
-        self.browser = None
-        self.options = None
-        self.save_path = None
+        # Переменные для
+        self.searchers = []  # для хранения всех систем поиска
+        self.methods_of_screen = []  # для методов нарезания скринов
+        self.browser = None  # браузер
+        self.options = None  # опции
+        self.save_path = None  # путь для сохранения
 
         # Назначаем кнопке Старт функцию start_search, которая отвечает за запуск метода run() в классе потока
         self.ui.pushButton_Start.clicked.connect(self.start_search)
@@ -47,33 +49,38 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui.radioButton_GoogleChrome.clicked.connect(self.set_browser)
         self.ui.radioButton_Firefox.clicked.connect(self.set_browser)
 
-        #
+        # Назначем клик по чекбоксам при выборе методов нарезания скринов
         self.ui.checkBox_AllResults.clicked.connect(self.settings_all_results)
         self.ui.checkBox_BlockOfAds.clicked.connect(self.settings_block_of_ads)
         self.ui.checkBox_JustAd.clicked.connect(self.settings_just_ad)
 
         # Значения элементов интерфейса по умолчанию
-        self.ui.label_WaitFinish.setText('Нажмите "Начать" для выполнения программы, но придется подождать...')
+        self.ui.label_WaitFinish.setText('Нажмите "Начать" для выполнения программы')
         # self.ui.checkBox_Yandex.setChecked(True)
-        # self.ui.radioButton_Firefox.setChecked(True)
+        # self.ui.radioButton_GoogleChrome.setChecked(True)
         # self.ui.checkBox_AllResults.setChecked(True)
 
         # Заглушки, пока функционал не готов
+        self.ui.checkBox_Google.setVisible(False)
+        self.ui.radioButton_Firefox.setVisible(False)
+        self.ui.checkBox_BlockOfAds.setVisible(False)
+        self.ui.checkBox_JustAd.setVisible(False)
         self.ui.checkBox_Google.setDisabled(True)
-        # self.ui.radioButton_Firefox.setDisabled(True)
+        self.ui.radioButton_Firefox.setDisabled(True)
         self.ui.checkBox_BlockOfAds.setDisabled(True)
         self.ui.checkBox_JustAd.setDisabled(True)
 
         # Временный текст
-        self.ui.textEdit_Requests.setText("""смартфоны купить
-ноутбук красноярск
-купить ноутбук
-смартфон samsung""")
-        self.ui.lineEdit_SiteAddress.setText('citilink.ru')
+#         self.ui.textEdit_Requests.setText("""смартфоны купить
+# ноутбук красноярск
+# купить ноутбук
+# смартфон samsung""")
+#         self.ui.lineEdit_SiteAddress.setText('citilink.ru')
 
     # Ф-ия присваивает переменным путь, который задаёт пользователь
     def get_save_path(self):
         self.save_path = QtWidgets.QFileDialog.getExistingDirectory()
+        self.ui.label_SavePath.setText('Путь: {0}'.format(self.save_path))
 
     # Ф-ии нарезания скриншотов
     def cut_all_results(self, driver, folder_path, search, request, site_address):
@@ -231,10 +238,15 @@ class MyWin(QtWidgets.QMainWindow):
             for index, (cell, s) in enumerate(zip(cellObj, stat)):
 
                 if index == 0:
+                    if stat[4] == 'Результатов нет':
+                        cell.fill = PatternFill(start_color='da9694', fill_type='solid')
                     cell.value = s
 
                 elif index == 1 or index == 2 or index == 3:
-                    cell.value = s[1]
+                    if s[1] == 0:
+                        cell.value = '-'
+                    else:
+                        cell.value = s[1]
                 elif index == 4:
                     cell.value = s
                     cell.hyperlink = s
@@ -284,8 +296,12 @@ class MyWin(QtWidgets.QMainWindow):
             # TODO продумать как изменять search. Когда ищет по яндексу должен быть yandex, когда по гуглу должен быть google
             search = 'yandex'
 
+            # Открываем браузер с заданными настройками
+            driver = self.browser(options=options)  # options=options
+
             # Перебор всех поисковых запросов
             for request in user_requests:
+                self.ui.label_WaitFinish.setText('Выполняю запрос: {0}'.format(request))
                 results = []
 
                 # Лист для позиций искомого сайта в выдаче
@@ -294,7 +310,6 @@ class MyWin(QtWidgets.QMainWindow):
                 screen_name = 'Результатов нет'
                 current_url = url + request
 
-                driver = self.browser(options=options) #options=options
                 driver.get(current_url)
 
                 # TODO продумать этот момент для гугла
@@ -305,7 +320,7 @@ class MyWin(QtWidgets.QMainWindow):
                 # TODO для оптимищации следует собирать со страницы только адреса, сравнивать их с нашим сайтом (сделать потом)
                 # Перебор реузльтатов выдачи поиска
                 for result in web_results:
-                    if 'реклама' in result.text and site_address in result.text:
+                    if site_address in result.text:
                         print()
                         print(result.text)
 
@@ -329,12 +344,13 @@ class MyWin(QtWidgets.QMainWindow):
                         # bitmap.save('screen.png')
 
                         driver.save_screenshot(screen_name)
-                        # Закрываем, так как для этого запроса браузер нам уже не понадобится
-                        driver.close()
+
+
 
                         positions, block_of_ads = self.get_positions(results, site_address)
 
                         # Рисуем на скрине
+                        self.ui.label_WaitFinish.setText('Выполняю запрос: {0}. Рисую на скрине'.format(request))
                         self.edit_screen(screen_name, results, positions, block_of_ads)
                         break
 
@@ -346,8 +362,15 @@ class MyWin(QtWidgets.QMainWindow):
                 # Добавляем данные в один большой, чтобы потом записать всё в эксель файл
                 statistics.append((request, spec, seo, garant, screen_name))
 
+        # Закрываем браузер
+        driver.close()
+
+        # Вот тут желательно перебрать скрины и обработать их
+        self.ui.label_WaitFinish.setText('Обрабатываю скриншоты')
+        # "тут"
+
         # Записываем статистику в файл
-        self.ui.label_WaitFinish.setText('Собираю статистику в файл, ща закончу...')
+        self.ui.label_WaitFinish.setText('Собираю статистику в файл')
         self.edit_file_stat(site_address, user_requests, statistics, folder_path)
 
         self.ui.label_WaitFinish.setText('Готово! ( ͡° ͜ʖ ͡°)')
