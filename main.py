@@ -56,11 +56,20 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Значения элементов интерфейса по умолчанию
         self.ui.label_WaitFinish.setText('Нажмите "Начать" для выполнения программы')
-        # self.ui.checkBox_Yandex.setChecked(True)
-        # self.ui.radioButton_GoogleChrome.setChecked(True)
-        # self.ui.checkBox_AllResults.setChecked(True)
+        self.ui.checkBox_Yandex.setChecked(True)
+        self.ui.radioButton_GoogleChrome.setChecked(True)
+        self.ui.checkBox_AllResults.setChecked(True)
+
+        # Вызываем функции, чтобы значения по умолчанию добавились в массивы
+        self.settings_all_results()
+        self.set_browser()
+        self.settings_yandex()
 
         # Заглушки, пока функционал не готов
+        self.ui.checkBox_Yandex.setDisabled(True)
+        self.ui.checkBox_AllResults.setDisabled(True)
+        self.ui.radioButton_GoogleChrome.setDisabled(True)
+
         self.ui.checkBox_Google.setVisible(False)
         self.ui.radioButton_Firefox.setVisible(False)
         self.ui.checkBox_BlockOfAds.setVisible(False)
@@ -75,7 +84,8 @@ class MyWin(QtWidgets.QMainWindow):
 # ноутбук красноярск
 # купить ноутбук
 # смартфон samsung""")
-#         self.ui.lineEdit_SiteAddress.setText('citilink.ru')
+#         self.ui.textEdit_SitesAddresses.setText("""citilink.ru
+# aldo-shop.ru""")
 
     # Ф-ия присваивает переменным путь, который задаёт пользователь
     def get_save_path(self):
@@ -139,6 +149,11 @@ class MyWin(QtWidgets.QMainWindow):
     def get_requests(self):
         user_requests = self.ui.textEdit_Requests.toPlainText().split('\n')
         return user_requests
+
+    def get_sites_addresses(self):
+        sites_addresses = self.ui.textEdit_SitesAddresses.toPlainText().split('\n')
+        return sites_addresses
+
 
     # Функция вычисляет позицию сайта относительно блоков спец/сео/гарант
     def get_site_position(self, mas, site_address):
@@ -225,34 +240,47 @@ class MyWin(QtWidgets.QMainWindow):
         print('сохранил нвоый рисунок')
 
     # Функция для создания файла по экселю и записи в него статистики
-    def edit_file_stat(self, site_address, user_requests, statistics, folder_path):
+    def edit_file_stat(self, statistics, folder_path):
         # Открываем шаблон файл экселя для записи статистики
         wb = load_workbook('template.xlsx')
         sheet = wb.active
-        sheet['A3'].value = site_address
 
-        start = 'B3'
-        end = 'F{0}'.format(len(user_requests) + 3)
+        start = 'A3'
+        end = 'F{0}'.format(len(statistics) + 3)
 
         for cellObj, stat in zip(sheet[start:end], statistics):
             for index, (cell, s) in enumerate(zip(cellObj, stat)):
 
                 if index == 0:
-                    if stat[4] == 'Результатов нет':
+                    cell.value = s
+
+                elif index == 1:
+                    if stat[5] == 'Результатов нет':
                         cell.fill = PatternFill(start_color='da9694', fill_type='solid')
                     cell.value = s
 
-                elif index == 1 or index == 2 or index == 3:
+                elif index == 2 or index == 3 or index == 4:
                     if s[1] == 0:
                         cell.value = '-'
                     else:
                         cell.value = s[1]
-                elif index == 4:
+
+                elif index == 5:
                     cell.value = s
                     cell.hyperlink = s
                     cell.style = 'Hyperlink'
 
-        wb.save('{0}\\{1}.xlsx'.format(folder_path, site_address))
+        wb.save('{0}\\statistics.xlsx'.format(folder_path))
+
+    # Открывает папку, куда указал пользователь
+    def open_folder(self, folder_path):
+        folder_path = folder_path.replace('/', '\\')
+        os.system('explorer "{0}"'.format(folder_path))
+
+    # Открывает excel файл со статистикой
+    def open_excel_file(self, folder_path):
+        folder_path = folder_path.replace('/', '\\')
+        os.system('explorer "{0}\\statistics.xlsx"'.format(folder_path))
 
     def start_search(self):
         self.thread_instance.start()
@@ -269,17 +297,22 @@ class MyWin(QtWidgets.QMainWindow):
         # Адрес сайта, который ввел пользователь
         # TODO отрезать лишнее: https, www, после ru/com тоже убирать
         # TODO ну или регулярное выражение, пока не напишет нормально
-        site_address = self.ui.lineEdit_SiteAddress.text()
-        print(site_address)
+        sites_addresses = self.get_sites_addresses()
+        print(sites_addresses)
 
         # Массив с запросами для поиска
         user_requests = self.get_requests()
         print(user_requests)
 
+        # Проверка ввел ли пользователь все данные
+        if user_requests[0] == '' or sites_addresses[0] == '' or self.save_path == None or self.save_path == '':
+            self.ui.label_WaitFinish.setText('Ошибка! Вы не указали запросы, сайт или путь для сохранения!')
+            return ''
+
         # Путь для создания папки со скриншотами
         # TODO брать с путь с интерфейса, который указал пользователь
         # folder_path = 'C:\\Users\\{0}\\Desktop\\'.format(os.getlogin()) + site_address
-        folder_path = '{0}\\{1}'.format(self.save_path, site_address)
+        folder_path = '{0}\\AH {1}'.format(self.save_path, sites_addresses[0])
         self.ui.label_SavePath.setText('Путь: {0}'.format(folder_path))
         if not os.path.exists(folder_path):
             os.mkdir(folder_path)
@@ -299,71 +332,74 @@ class MyWin(QtWidgets.QMainWindow):
             # Открываем браузер с заданными настройками
             driver = self.browser(options=options)  # options=options
 
+
             # Перебор всех поисковых запросов
             for request in user_requests:
-                self.ui.label_WaitFinish.setText('Выполняю запрос: {0}'.format(request))
-                results = []
-
-                # Лист для позиций искомого сайта в выдаче
-                # Первое число позиция по всем запросам, второе относительно блока в котором находится
-                positions = [(0, 0), (0, 0), (0, 0)]
-                screen_name = 'Результатов нет'
                 current_url = url + request
-
                 driver.get(current_url)
 
                 # TODO продумать этот момент для гугла
                 # Находим все элементы выдачи на странице
                 web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
 
-                # TODO в каждом результате много данных и в них программа ищет наличие сайта
-                # TODO для оптимищации следует собирать со страницы только адреса, сравнивать их с нашим сайтом (сделать потом)
-                # Перебор реузльтатов выдачи поиска
-                for result in web_results:
-                    if site_address in result.text:
-                        print()
-                        print(result.text)
+                for site_address in sites_addresses:
 
-                        # Собираем всю инфу со страницы
-                        for index, result in enumerate(web_results, start=1):
-                            results.append((index, result.text, result.location, result.size))
+                    self.ui.label_WaitFinish.setText('Выполняю запрос: {0} - {1}'.format(site_address, request))
+                    results = []
 
-                        # Перебор методов нарезания скриншотов
-                        # for screen_cut in self.methods_of_screen:
-                        #     screen_cut(driver, folder_path, search, request, site_address)
+                    # Лист для позиций искомого сайта в выдаче
+                    # Первое число позиция по всем запросам, второе относительно блока в котором находится
+                    positions = [(0, 0), (0, 0), (0, 0)]
+                    screen_name = 'Результатов нет'
 
-                        # TODO тут с именем скриншота. Как его потом вытаскивать из функций
-                        screen_name = '{0}\\{1}_{2}_{3}_{4}'.format(folder_path, search, request, site_address, 'all_results.png')
-                        print(screen_name)
+                    # TODO в каждом результате много данных и в них программа ищет наличие сайта
+                    # TODO для оптимищации следует собирать со страницы только адреса, сравнивать их с нашим сайтом (сделать потом)
+                    # Перебор реузльтатов выдачи поиска
+                    for result in web_results:
 
-                        # Блок кода, чтобы делать скрин рабочего стола
-                        # wr = driver.find_element_by_xpath('//li[@class="serp-item"][2]')
-                        # driver.execute_script('arguments[0].scrollIntoView();', wr)
-                        # sleep(3)
-                        # bitmap = autopy.bitmap.capture_screen()
-                        # bitmap.save('screen.png')
+                        if site_address in result.text:
+                            print()
+                            print(result.text)
 
-                        driver.save_screenshot(screen_name)
+                            # Собираем всю инфу со страницы
+                            for index, result in enumerate(web_results, start=1):
+                                results.append((index, result.text, result.location, result.size))
 
+                            # Перебор методов нарезания скриншотов
+                            # for screen_cut in self.methods_of_screen:
+                            #     screen_cut(driver, folder_path, search, request, site_address)
 
+                            # TODO тут с именем скриншота. Как его потом вытаскивать из функций
+                            screen_name = '{0}\\{1}_{2}_{3}_{4}'.format(folder_path, search, request, site_address, 'all_results.png')
+                            print(screen_name)
 
-                        positions, block_of_ads = self.get_positions(results, site_address)
+                            # Блок кода, чтобы делать скрин рабочего стола
+                            # wr = driver.find_element_by_xpath('//li[@class="serp-item"][2]')
+                            # driver.execute_script('arguments[0].scrollIntoView();', wr)
+                            # sleep(3)
+                            # bitmap = autopy.bitmap.capture_screen()
+                            # bitmap.save('screen.png')
 
-                        # Рисуем на скрине
-                        self.ui.label_WaitFinish.setText('Выполняю запрос: {0}. Рисую на скрине'.format(request))
-                        self.edit_screen(screen_name, results, positions, block_of_ads)
-                        break
+                            driver.save_screenshot(screen_name)
 
-                # Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
-                spec = positions[0]
-                seo = positions[1]
-                garant = positions[2]
+                            positions, block_of_ads = self.get_positions(results, site_address)
 
-                # Добавляем данные в один большой, чтобы потом записать всё в эксель файл
-                statistics.append((request, spec, seo, garant, screen_name))
+                            # Рисуем на скрине
+                            self.ui.label_WaitFinish.setText('Выполняю запрос: {0} - {1}. Рисую на скрине'.format(site_address, request))
+                            self.edit_screen(screen_name, results, positions, block_of_ads)
+                            break
 
-        # Закрываем браузер
-        driver.close()
+                    # Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
+                    spec = positions[0]
+                    seo = positions[1]
+                    garant = positions[2]
+
+                    # Добавляем данные в один большой, чтобы потом записать всё в эксель файл
+                    statistics.append((site_address, request, spec, seo, garant, screen_name))
+
+            # Закрываем браузер
+            driver.close()
+            print('закрыл драйвер')
 
         # Вот тут желательно перебрать скрины и обработать их
         self.ui.label_WaitFinish.setText('Обрабатываю скриншоты')
@@ -371,9 +407,25 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Записываем статистику в файл
         self.ui.label_WaitFinish.setText('Собираю статистику в файл')
-        self.edit_file_stat(site_address, user_requests, statistics, folder_path)
+        self.edit_file_stat(statistics, folder_path)
+        print('записал стату в файл')
+
+        # Закрывает процесс chromedriver
+        os.system("TASKKILL /F /IM chromedriver.exe")
+        print('закрыл chromedriver')
+
 
         self.ui.label_WaitFinish.setText('Готово! ( ͡° ͜ʖ ͡°)')
+
+        # Проверка указал ли пользователь открывать папку
+        if self.ui.checkBox_OpenFolder.isChecked():
+            self.open_folder(folder_path)
+            print('открыл папку')
+
+        # Проверка указал ли пользователь открывать excel файл
+        if self.ui.checkBox_OpenExcelFile.isChecked():
+            self.open_excel_file(folder_path)
+            print('открыл файл')
 
 
 if __name__ == "__main__":
