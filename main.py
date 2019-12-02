@@ -4,11 +4,14 @@ from datetime import datetime
 
 from PIL import Image, ImageDraw, ImageFont
 from PyQt5.QtCore import QThread
+from PyQt5.QtWidgets import QCompleter, QTableWidgetItem
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from selenium import webdriver
 
 from interface import *
+
+from functools import partial
 
 
 class SearchThread(QThread):
@@ -30,6 +33,33 @@ class MyWin(QtWidgets.QMainWindow):
         # Экземпляр потока
         self.thread_instance = SearchThread(self)
 
+        # NEW PART
+
+        self.ui.tableWidget.setColumnCount(2)
+        self.ui.tableWidget.setRowCount(5)
+        regions = self.get_regions()
+        print(regions)
+
+        completer = QCompleter(regions)
+        completer.setCaseSensitivity(False)
+
+        line_edits = []
+        for i in range(0, self.ui.tableWidget.rowCount()):
+            line_edits.append(QtWidgets.QLineEdit())
+            line_edits[i].setCompleter(completer)
+            self.ui.tableWidget.setCellWidget(i, 0, line_edits[i])
+
+            # line_edits[i].editingFinished.connect(
+            #     lambda state, w=self.ui.tableWidget.cellWidget(i, 0), r=i, c=0: self.get_lr(w, r, c))
+
+            # line_edits[i].editingFinished.connect(self.get_lr)
+
+            line_edits[i].editingFinished.connect(partial(self.get_lr, cell=self.ui.tableWidget.cellWidget(i, 0), row=i, column=1))
+
+        print(line_edits)
+        print(self.ui.tableWidget.rowCount())
+
+
         # Переменные для
         self.searchers = []  # для хранения всех систем поиска
         self.methods_of_screen = []  # для методов нарезания скринов
@@ -49,7 +79,7 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui.radioButton_GoogleChrome.clicked.connect(self.set_browser)
         self.ui.radioButton_Firefox.clicked.connect(self.set_browser)
 
-        # Назначем клик по чекбоксам при выборе методов нарезания скринов
+        # Назначаем клик по чекбоксам при выборе методов нарезания скринов
         self.ui.checkBox_AllResults.clicked.connect(self.settings_all_results)
         self.ui.checkBox_BlockOfAds.clicked.connect(self.settings_block_of_ads)
         self.ui.checkBox_JustAd.clicked.connect(self.settings_just_ad)
@@ -86,6 +116,9 @@ class MyWin(QtWidgets.QMainWindow):
 # смартфон samsung""")
 #         self.ui.textEdit_SitesAddresses.setText("""citilink.ru
 # aldo-shop.ru""")
+
+    # Ф-ия возвращает список с регионами
+
 
     # Ф-ия присваивает переменным путь, который задаёт пользователь
     def get_save_path(self):
@@ -134,9 +167,9 @@ class MyWin(QtWidgets.QMainWindow):
     # Функция добавляет/удаляет в/из списка url для поиска в яндексе
     def settings_yandex(self):
         if self.ui.checkBox_Yandex.isChecked():
-            self.searchers.append('https://yandex.ru/search/?text=')
+            self.searchers.append('https://yandex.ru/search/?text={0}&lr={1}')
         else:
-            self.searchers.remove('https://yandex.ru/search/?text=')
+            self.searchers.remove('https://yandex.ru/search/?text={0}&lr={1}')
 
     # Функция добавляет/удаляет в/из списка url для поиска в гугле
     def settings_google(self):
@@ -153,7 +186,6 @@ class MyWin(QtWidgets.QMainWindow):
     def get_sites_addresses(self):
         sites_addresses = self.ui.textEdit_SitesAddresses.toPlainText().split('\n')
         return sites_addresses
-
 
     # Функция вычисляет позицию сайта относительно блоков спец/сео/гарант
     def get_site_position(self, mas, site_address):
@@ -239,33 +271,94 @@ class MyWin(QtWidgets.QMainWindow):
         image.save(screen_name)
         print('сохранил нвоый рисунок')
 
+    # Функция возвращает значение lr для региона, который выбрал пользователь
+    def get_lr(self, cell, row, column):
+        print(cell.text())
+        print(row)
+        print(column)
+
+        if cell.text() == '':
+            return
+
+        lr = 'None'
+        region = cell.text()
+
+        wb = load_workbook('regions.xlsx')
+        sheet = wb.active
+
+        column_regions = sheet['B']
+        for index, cell_ex in enumerate(column_regions, start=1):
+            if cell_ex.value == region:
+                lr = sheet['A' + str(index)].value
+                break
+        wb.close()
+
+        print(lr)
+
+        self.ui.tableWidget.setItem(row, column, QTableWidgetItem(str(lr)))
+
+    # Функция возвращает список с городами для пользовательского поиска
+    def get_regions(self):
+
+        # Сделать кортеж
+        regions = []
+
+        wb = load_workbook('regions.xlsx')
+        sheet = wb.active
+
+        column_regions = sheet['B']
+        for cell in column_regions:
+            regions.append(cell.value)
+
+        print(regions)
+        wb.close()
+        return regions
+
+    # Функция возвращает словарь регионов из виджета
+    def get_regions_from_table(self):
+        regions = {}
+        for row in range(0, 5):
+            try:
+                city = self.ui.tableWidget.cellWidget(row, 0).text()
+                lr = self.ui.tableWidget.item(row, 1).text()
+                regions[city] = lr
+            except:
+                pass
+
+        if len(regions.items()) == 0:
+            regions['current'] = ''
+        return regions
+
+
     # Функция для создания файла по экселю и записи в него статистики
     def edit_file_stat(self, statistics, folder_path):
+        # statistics.append((region, request, site_address, spec, seo, garant, screen_name))
+        # statistics.append((site_address, request, spec, seo, garant, screen_name))
         # Открываем шаблон файл экселя для записи статистики
         wb = load_workbook('template.xlsx')
         sheet = wb.active
 
         start = 'A3'
-        end = 'F{0}'.format(len(statistics) + 3)
+        end = 'G{0}'.format(len(statistics) + 3)
 
         for cellObj, stat in zip(sheet[start:end], statistics):
             for index, (cell, s) in enumerate(zip(cellObj, stat)):
 
-                if index == 0:
+                if index == 0 or index == 2:
                     cell.value = s
 
                 elif index == 1:
-                    if stat[5] == 'Результатов нет':
+                    if stat[6] == 'Результатов нет':
                         cell.fill = PatternFill(start_color='da9694', fill_type='solid')
                     cell.value = s
 
-                elif index == 2 or index == 3 or index == 4:
+                elif index == 3 or index == 4 or index == 5:
                     if s[1] == 0:
                         cell.value = '-'
                     else:
                         cell.value = s[1]
 
-                elif index == 5:
+                elif index == 6:
                     cell.value = s
                     cell.hyperlink = s
                     cell.style = 'Hyperlink'
@@ -304,6 +397,10 @@ class MyWin(QtWidgets.QMainWindow):
         user_requests = self.get_requests()
         print(user_requests)
 
+        #Словарь с регионами и кодом
+        regions = self.get_regions_from_table()
+        print(regions)
+
         # Проверка ввел ли пользователь все данные
         if user_requests[0] == '' or sites_addresses[0] == '' or self.save_path == None or self.save_path == '':
             self.ui.label_WaitFinish.setText('Ошибка! Вы не указали запросы, сайт или путь для сохранения!')
@@ -332,70 +429,75 @@ class MyWin(QtWidgets.QMainWindow):
             # Открываем браузер с заданными настройками
             driver = self.browser(options=options)  # options=options
 
+            # Перебор регионов, по которым ведётся поиск
+            for region, lr in regions.items():
+                print(region)
+                print(lr)
 
-            # Перебор всех поисковых запросов
-            for request in user_requests:
-                current_url = url + request
-                driver.get(current_url)
+                # Перебор всех поисковых запросов
+                for request in user_requests:
+                    current_url = url.format(request, lr)
+                    print(current_url)
+                    driver.get(current_url)
 
-                # TODO продумать этот момент для гугла
-                # Находим все элементы выдачи на странице
-                web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
+                    # TODO продумать этот момент для гугла
+                    # Находим все элементы выдачи на странице
+                    web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
 
-                for site_address in sites_addresses:
+                    for site_address in sites_addresses:
 
-                    self.ui.label_WaitFinish.setText('Выполняю запрос: {0} - {1}'.format(site_address, request))
-                    results = []
+                        self.ui.label_WaitFinish.setText('Выполняю запрос: {0} - {1} - {2}'.format(region, request, site_address))
+                        results = []
 
-                    # Лист для позиций искомого сайта в выдаче
-                    # Первое число позиция по всем запросам, второе относительно блока в котором находится
-                    positions = [(0, 0), (0, 0), (0, 0)]
-                    screen_name = 'Результатов нет'
+                        # Лист для позиций искомого сайта в выдаче
+                        # Первое число позиция по всем запросам, второе относительно блока в котором находится
+                        positions = [(0, 0), (0, 0), (0, 0)]
+                        screen_name = 'Результатов нет'
 
-                    # TODO в каждом результате много данных и в них программа ищет наличие сайта
-                    # TODO для оптимищации следует собирать со страницы только адреса, сравнивать их с нашим сайтом (сделать потом)
-                    # Перебор реузльтатов выдачи поиска
-                    for result in web_results:
+                        # TODO в каждом результате много данных и в них программа ищет наличие сайта
+                        # TODO для оптимищации следует собирать со страницы только адреса, сравнивать их с нашим сайтом (сделать потом)
+                        # Перебор реузльтатов выдачи поиска
+                        for result in web_results:
 
-                        if site_address in result.text:
-                            print()
-                            print(result.text)
+                            if site_address in result.text:
+                                print()
+                                print(result.text)
 
-                            # Собираем всю инфу со страницы
-                            for index, result in enumerate(web_results, start=1):
-                                results.append((index, result.text, result.location, result.size))
+                                # Собираем всю инфу со страницы
+                                for index, result in enumerate(web_results, start=1):
+                                    results.append((index, result.text, result.location, result.size))
 
-                            # Перебор методов нарезания скриншотов
-                            # for screen_cut in self.methods_of_screen:
-                            #     screen_cut(driver, folder_path, search, request, site_address)
+                                # Перебор методов нарезания скриншотов
+                                # for screen_cut in self.methods_of_screen:
+                                #     screen_cut(driver, folder_path, search, request, site_address)
 
-                            # TODO тут с именем скриншота. Как его потом вытаскивать из функций
-                            screen_name = '{0}\\{1}_{2}_{3}_{4}'.format(folder_path, search, request, site_address, 'all_results.png')
-                            print(screen_name)
+                                # TODO тут с именем скриншота. Как его потом вытаскивать из функций
+                                screen_name = '{0}\\{1}_{2}_{3}_{4}_{5}'.format(folder_path, search, region, request, site_address, 'all_results.png')
+                                print(screen_name)
 
-                            # Блок кода, чтобы делать скрин рабочего стола
-                            # wr = driver.find_element_by_xpath('//li[@class="serp-item"][2]')
-                            # driver.execute_script('arguments[0].scrollIntoView();', wr)
-                            # sleep(3)
-                            # bitmap = autopy.bitmap.capture_screen()
-                            # bitmap.save('screen.png')
+                                # Блок кода, чтобы делать скрин рабочего стола
+                                # wr = driver.find_element_by_xpath('//li[@class="serp-item"][2]')
+                                # driver.execute_script('arguments[0].scrollIntoView();', wr)
+                                # sleep(3)
+                                # bitmap = autopy.bitmap.capture_screen()
+                                # bitmap.save('screen.png')
 
-                            driver.save_screenshot(screen_name)
+                                driver.save_screenshot(screen_name)
 
-                            positions, block_of_ads = self.get_positions(results, site_address)
+                                positions, block_of_ads = self.get_positions(results, site_address)
 
-                            # Рисуем на скрине
-                            self.ui.label_WaitFinish.setText('Выполняю запрос: {0} - {1}. Рисую на скрине'.format(site_address, request))
-                            self.edit_screen(screen_name, results, positions, block_of_ads)
-                            break
+                                # Рисуем на скрине
+                                self.ui.label_WaitFinish.setText('Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request, site_address))
+                                self.edit_screen(screen_name, results, positions, block_of_ads)
+                                break
 
-                    # Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
-                    spec = positions[0]
-                    seo = positions[1]
-                    garant = positions[2]
+                        # Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
+                        spec = positions[0]
+                        seo = positions[1]
+                        garant = positions[2]
 
-                    # Добавляем данные в один большой, чтобы потом записать всё в эксель файл
-                    statistics.append((site_address, request, spec, seo, garant, screen_name))
+                        # Добавляем данные в один большой, чтобы потом записать всё в эксель файл
+                        statistics.append((region, request, site_address, spec, seo, garant, screen_name))
 
             # Закрываем браузер
             driver.close()
