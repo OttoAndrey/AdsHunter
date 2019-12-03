@@ -1,6 +1,7 @@
 import os
 import sys
 from datetime import datetime
+from functools import partial
 
 from PIL import Image, ImageDraw, ImageFont
 from PyQt5.QtCore import QThread
@@ -10,8 +11,6 @@ from openpyxl.styles import PatternFill
 from selenium import webdriver
 
 from interface import *
-
-from functools import partial
 
 
 class SearchThread(QThread):
@@ -33,32 +32,30 @@ class MyWin(QtWidgets.QMainWindow):
         # Экземпляр потока
         self.thread_instance = SearchThread(self)
 
-        # NEW PART
-
+        # Настройки таблицы
         self.ui.tableWidget.setColumnCount(2)
         self.ui.tableWidget.setRowCount(5)
+
+        # Массив с регионами из эксель файла
         regions = self.get_regions()
         print(regions)
 
+        # Настройки завершателя слов
         completer = QCompleter(regions)
         completer.setCaseSensitivity(False)
 
+        # В ячейки таблицы первого столбца устанавливаем QLineEdit, в которые пользователь будет писать регионы
         line_edits = []
         for i in range(0, self.ui.tableWidget.rowCount()):
             line_edits.append(QtWidgets.QLineEdit())
+            # Устанавливаем QLineEdit QCompleter, чтобы он завершал слова, которые пишет пользователь
             line_edits[i].setCompleter(completer)
             self.ui.tableWidget.setCellWidget(i, 0, line_edits[i])
-
-            # line_edits[i].editingFinished.connect(
-            #     lambda state, w=self.ui.tableWidget.cellWidget(i, 0), r=i, c=0: self.get_lr(w, r, c))
-
-            # line_edits[i].editingFinished.connect(self.get_lr)
-
+            # Передаём частями в функцию данные о тексте, о номере строки и столбца, в которой находится QLineEdit
             line_edits[i].editingFinished.connect(partial(self.get_lr, cell=self.ui.tableWidget.cellWidget(i, 0), row=i, column=1))
 
         print(line_edits)
         print(self.ui.tableWidget.rowCount())
-
 
         # Переменные для
         self.searchers = []  # для хранения всех систем поиска
@@ -116,9 +113,6 @@ class MyWin(QtWidgets.QMainWindow):
 # смартфон samsung""")
 #         self.ui.textEdit_SitesAddresses.setText("""citilink.ru
 # aldo-shop.ru""")
-
-    # Ф-ия возвращает список с регионами
-
 
     # Ф-ия присваивает переменным путь, который задаёт пользователь
     def get_save_path(self):
@@ -243,6 +237,7 @@ class MyWin(QtWidgets.QMainWindow):
             draw.text((15, 95), date, fill=(255, 0, 0), font=font)
 
         print('нарисовал дату время')
+
         # Выделяем рамкой искомые запросы
         for position in positions:
             if position[0] != 0:
@@ -267,9 +262,8 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Конец рисования
         del draw
-        # image.save('{0}_{1}'.format(screen_name, 'new.png'))
         image.save(screen_name)
-        print('сохранил нвоый рисунок')
+        print('сохранил новый рисунок')
 
     # Функция возвращает значение lr для региона, который выбрал пользователь
     def get_lr(self, cell, row, column):
@@ -319,6 +313,10 @@ class MyWin(QtWidgets.QMainWindow):
         regions = {}
         for row in range(0, 5):
             try:
+                # Пропускаем, если пользователь в таблице оставил пустые строки или города с None
+                if self.ui.tableWidget.cellWidget(row, 0).text() == '' or self.ui.tableWidget.item(row, 1).text() == 'None':
+                    continue
+
                 city = self.ui.tableWidget.cellWidget(row, 0).text()
                 lr = self.ui.tableWidget.item(row, 1).text()
                 regions[city] = lr
@@ -327,13 +325,11 @@ class MyWin(QtWidgets.QMainWindow):
 
         if len(regions.items()) == 0:
             regions['current'] = ''
-        return regions
 
+        return regions
 
     # Функция для создания файла по экселю и записи в него статистики
     def edit_file_stat(self, statistics, folder_path):
-        # statistics.append((region, request, site_address, spec, seo, garant, screen_name))
-        # statistics.append((site_address, request, spec, seo, garant, screen_name))
         # Открываем шаблон файл экселя для записи статистики
         wb = load_workbook('template.xlsx')
         sheet = wb.active
@@ -344,20 +340,25 @@ class MyWin(QtWidgets.QMainWindow):
         for cellObj, stat in zip(sheet[start:end], statistics):
             for index, (cell, s) in enumerate(zip(cellObj, stat)):
 
+                # 0 - Регион
+                # 2 - Сайт
                 if index == 0 or index == 2:
                     cell.value = s
 
+                # 1 - Запрос. Если результатов нет, то красим ячейку в красный
                 elif index == 1:
                     if stat[6] == 'Результатов нет':
                         cell.fill = PatternFill(start_color='da9694', fill_type='solid')
                     cell.value = s
 
+                # 3, 4, 5 - Значения позиций на странице. Если объявления нет, то ставит прочерк
                 elif index == 3 or index == 4 or index == 5:
                     if s[1] == 0:
                         cell.value = '-'
                     else:
                         cell.value = s[1]
 
+                # 6 - Гиперссылка на скриншот
                 elif index == 6:
                     cell.value = s
                     cell.hyperlink = s
@@ -397,9 +398,18 @@ class MyWin(QtWidgets.QMainWindow):
         user_requests = self.get_requests()
         print(user_requests)
 
-        #Словарь с регионами и кодом
+        #Словарь с регионами и кодами lr
         regions = self.get_regions_from_table()
         print(regions)
+
+        print(len(user_requests))
+        print(len(regions))
+
+        # Проверка на большое кол-во обращений к яндексу
+        if len(user_requests) * len(regions) > 20:
+            self.ui.label_WaitFinish.setText("""Кол-во обращений (запросы * регионы) к яндексу превышает 20! 
+Сделайте поменьше, пожалуйста""")
+            return ''
 
         # Проверка ввел ли пользователь все данные
         if user_requests[0] == '' or sites_addresses[0] == '' or self.save_path == None or self.save_path == '':
@@ -515,7 +525,6 @@ class MyWin(QtWidgets.QMainWindow):
         # Закрывает процесс chromedriver
         os.system("TASKKILL /F /IM chromedriver.exe")
         print('закрыл chromedriver')
-
 
         self.ui.label_WaitFinish.setText('Готово! ( ͡° ͜ʖ ͡°)')
 
