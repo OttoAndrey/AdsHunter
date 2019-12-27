@@ -1,9 +1,11 @@
 import os
 import sys
+import re
 from datetime import datetime
 from functools import partial
+from time import sleep
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageGrab
 from PyQt5.QtCore import QThread
 from PyQt5.QtWidgets import QCompleter, QTableWidgetItem
 from openpyxl import load_workbook
@@ -107,12 +109,9 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui.checkBox_JustAd.setDisabled(True)
 
         # Временный текст
-#         self.ui.textEdit_Requests.setText("""смартфоны купить
-# ноутбук красноярск
-# купить ноутбук
-# смартфон samsung""")
-#         self.ui.textEdit_SitesAddresses.setText("""citilink.ru
-# aldo-shop.ru""")
+#         self.ui.textEdit_Requests.setText("""шины
+# зимние шины""")
+#         self.ui.textEdit_SitesAddresses.setText("""baza.drom.ru""")
 
     # Ф-ия присваивает переменным путь, который задаёт пользователь
     def get_save_path(self):
@@ -150,11 +149,11 @@ class MyWin(QtWidgets.QMainWindow):
 
     # Функция изменяет значение browser
     def set_browser(self):
+        print('бразуер установлен')
         if self.ui.radioButton_GoogleChrome.isChecked():
             self.browser = webdriver.Chrome
             self.options = webdriver.ChromeOptions()
-            self.options.add_argument('headless')
-            self.options.add_argument('window-size=800x3800')
+            self.options.add_argument('window-size=1920x3800')
         else:
             self.browser = webdriver.Firefox
 
@@ -175,11 +174,30 @@ class MyWin(QtWidgets.QMainWindow):
     # Функция разбивает текст пользователя в поле Запросы на элементы массива и возвращает массив
     def get_requests(self):
         user_requests = self.ui.textEdit_Requests.toPlainText().split('\n')
+        for request in user_requests:
+            if request == '':
+                user_requests.remove(request)
         return user_requests
 
     def get_sites_addresses(self):
+        clear_sites_addresses = []
+        pattern = r'\w+-*\w+\.\w+-*\w+\.*\w*'
+
         sites_addresses = self.ui.textEdit_SitesAddresses.toPlainText().split('\n')
-        return sites_addresses
+        print(sites_addresses)
+
+        for site in sites_addresses:
+            match = re.search(pattern, site)
+            if match:
+                match = match[0]
+                if match[0:4] == 'www.':
+                    match = match.replace(match[0:4], '')
+
+                clear_sites_addresses.append(match)
+
+        print(clear_sites_addresses)
+
+        return clear_sites_addresses
 
     # Функция вычисляет позицию сайта относительно блоков спец/сео/гарант
     def get_site_position(self, mas, site_address):
@@ -388,11 +406,8 @@ class MyWin(QtWidgets.QMainWindow):
         print(self.methods_of_screen)
         print(self.save_path)
 
-        # Адрес сайта, который ввел пользователь
-        # TODO отрезать лишнее: https, www, после ru/com тоже убирать
-        # TODO ну или регулярное выражение, пока не напишет нормально
+        # Адреса сайтов, который ввел пользователь
         sites_addresses = self.get_sites_addresses()
-        print(sites_addresses)
 
         # Массив с запросами для поиска
         user_requests = self.get_requests()
@@ -405,11 +420,14 @@ class MyWin(QtWidgets.QMainWindow):
         print(len(user_requests))
         print(len(regions))
 
-        # Проверка на большое кол-во обращений к яндексу
-        if len(user_requests) * len(regions) > 20:
-            self.ui.label_WaitFinish.setText("""Кол-во обращений (запросы * регионы) к яндексу превышает 20! 
-Сделайте поменьше, пожалуйста""")
-            return ''
+        # По умолчанию есть ограничение на кол-во запросов
+        # Если выбрать соответсвующий чекбокс, то проверки на кол-во запросов не будет
+        if self.ui.checkBox_NoLimits.isChecked() == False:
+            # Проверка на большое кол-во обращений к яндексу
+            if len(user_requests) * len(regions) > 20:
+                self.ui.label_WaitFinish.setText("""Кол-во обращений (запросы * регионы) к яндексу превышает 20! 
+    Сделайте поменьше, пожалуйста""")
+                return ''
 
         # Проверка ввел ли пользователь все данные
         if user_requests[0] == '' or sites_addresses[0] == '' or self.save_path == None or self.save_path == '':
@@ -429,15 +447,26 @@ class MyWin(QtWidgets.QMainWindow):
 
         '''Начинаем перебирать системы поиска, затем открываем бразуер, формируем запрос,
         на странцие ищем рекламу, и если находим перебираем список с методами нарезки скринов'''
+
+        print(self.ui.checkBox_WindowMode.isChecked())
+
+        if self.ui.checkBox_WindowMode.isChecked() == False:
+            self.options.add_argument('headless')
+            print('браузер спрятан')
+
         options = self.options
+
+        # Открываем браузер с заданными настройками
+        driver = self.browser(options=options)  # options=options
+
+        if self.ui.checkBox_WindowMode.isChecked() == True:
+            driver.maximize_window()
+            print('раскрыл окно')
 
         # Перебор всех поисковых систем
         for url in self.searchers:
             # TODO продумать как изменять search. Когда ищет по яндексу должен быть yandex, когда по гуглу должен быть google
             search = 'yandex'
-
-            # Открываем браузер с заданными настройками
-            driver = self.browser(options=options)  # options=options
 
             # Перебор регионов, по которым ведётся поиск
             for region, lr in regions.items():
@@ -453,6 +482,8 @@ class MyWin(QtWidgets.QMainWindow):
                     # TODO продумать этот момент для гугла
                     # Находим все элементы выдачи на странице
                     web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
+                    # Находим все адреса сайтов в выдаче
+                    #sites_on_page = driver.find_elements_by_xpath('//li[@class="serp-item"]/div/div/div/a/b')
 
                     for site_address in sites_addresses:
 
@@ -467,39 +498,71 @@ class MyWin(QtWidgets.QMainWindow):
                         # TODO в каждом результате много данных и в них программа ищет наличие сайта
                         # TODO для оптимищации следует собирать со страницы только адреса, сравнивать их с нашим сайтом (сделать потом)
                         # Перебор реузльтатов выдачи поиска
-                        for result in web_results:
 
-                            if site_address in result.text:
-                                print()
-                                print(result.text)
+                        if self.ui.checkBox_WindowMode.isChecked() == True:
+                            print('скрины в окнном режиме')
+                            for i in range(0, 4):
+                                if site_address in web_results[i].text and 'реклама' in web_results[i].text:
 
-                                # Собираем всю инфу со страницы
-                                for index, result in enumerate(web_results, start=1):
-                                    results.append((index, result.text, result.location, result.size))
+                                    for index, r in enumerate(web_results, start=1):
+                                        results.append((index, r.text, r.location, r.size))
 
-                                # Перебор методов нарезания скриншотов
-                                # for screen_cut in self.methods_of_screen:
-                                #     screen_cut(driver, folder_path, search, request, site_address)
+                                    print(web_results[i].text)
+                                    driver.execute_script("window.scrollTo(0, {0})".format(web_results[i].location['y']-100))
 
-                                # TODO тут с именем скриншота. Как его потом вытаскивать из функций
-                                screen_name = '{0}\\{1}_{2}_{3}_{4}_{5}'.format(folder_path, search, region, request, site_address, 'all_results.png')
-                                print(screen_name)
+                                    screen_name = '{0}\\{1}_{2}_{3}_{4}_{5}'.format(folder_path, search, region,
+                                                                                    request, site_address,
+                                                                                    'window_mode.png')
 
-                                # Блок кода, чтобы делать скрин рабочего стола
-                                # wr = driver.find_element_by_xpath('//li[@class="serp-item"][2]')
-                                # driver.execute_script('arguments[0].scrollIntoView();', wr)
-                                # sleep(3)
-                                # bitmap = autopy.bitmap.capture_screen()
-                                # bitmap.save('screen.png')
+                                    print(screen_name)
 
-                                driver.save_screenshot(screen_name)
+                                    sleep(1)
 
-                                positions, block_of_ads = self.get_positions(results, site_address)
+                                    # #скрин
+                                    img = ImageGrab.grab().save(screen_name, 'PNG')
+                                    img = Image.open(screen_name)
+                                    new_img = img.crop((0, 120, img.width, img.height))
 
-                                # Рисуем на скрине
-                                self.ui.label_WaitFinish.setText('Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request, site_address))
-                                self.edit_screen(screen_name, results, positions, block_of_ads)
-                                break
+                                    # Рисуем на скрине
+                                    self.ui.label_WaitFinish.setText(
+                                        'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request,
+                                                                                                   site_address))
+
+                                    draw = ImageDraw.Draw(new_img)
+                                    draw.rectangle((116, 0 + 95, web_results[i].size['width'] + 116, web_results[i].size['height'] + 95),
+                                                   outline=(255, 0, 0, 255),
+                                                   width=2)
+                                    new_img.save(screen_name, 'PNG')
+
+                                    positions, block_of_ads = self.get_positions(results, site_address)
+                                    break
+                        else:
+                            print('фулл скрин')
+                            for result in web_results:
+                                if site_address in result.text:
+                                    print(result.text)
+
+                                    # Собираем всю инфу со страницы
+                                    for index, result in enumerate(web_results, start=1):
+                                        results.append((index, result.text, result.location, result.size))
+
+                                    # Перебор методов нарезания скриншотов
+                                    # for screen_cut in self.methods_of_screen:
+                                    #     screen_cut(driver, folder_path, search, request, site_address)
+
+                                    # TODO тут с именем скриншота. Как его потом вытаскивать из функций
+                                    screen_name = '{0}\\{1}_{2}_{3}_{4}_{5}'.format(folder_path, search, region, request, site_address, 'all_results.png')
+                                    print(screen_name)
+
+                                    driver.save_screenshot(screen_name)
+
+                                    positions, block_of_ads = self.get_positions(results, site_address)
+
+                                    # Рисуем на скрине
+                                    self.ui.label_WaitFinish.setText('Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request, site_address))
+                                    self.edit_screen(screen_name, results, positions, block_of_ads)
+
+                                    break
 
                         # Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
                         spec = positions[0]
