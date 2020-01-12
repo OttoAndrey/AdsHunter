@@ -3,7 +3,7 @@ import sys
 import re
 from datetime import datetime
 from functools import partial
-from time import sleep
+from time import sleep, gmtime, strftime
 
 from PIL import Image, ImageDraw, ImageFont, ImageGrab
 from PyQt5.QtCore import QThread
@@ -16,13 +16,20 @@ from interface import *
 
 
 class SearchThread(QThread):
+    running = False
     def __init__(self, mainwindow):
         QThread.__init__(self)
         self.mainwindow = mainwindow
+        self.running = True
 
     def run(self):
         # Запуск функции поиска
-        self.mainwindow.start_searching()
+        while self.running:
+            self.mainwindow.start_searching()
+        self.running = True
+
+    def stop(self):
+        self.running = False
 
 
 class MyWin(QtWidgets.QMainWindow):
@@ -61,52 +68,31 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Переменные для
         self.searchers = []  # для хранения всех систем поиска
-        self.methods_of_screen = []  # для методов нарезания скринов
-        self.browser = None  # браузер
-        self.options = None  # опции
         self.save_path = None  # путь для сохранения
 
         # Назначаем кнопке Старт функцию start_search, которая отвечает за запуск метода run() в классе потока
         self.ui.pushButton_Start.clicked.connect(self.start_search)
+        self.ui.pushButton_Cancel.clicked.connect(self.end_search)
         self.ui.pushButton_SavePath.clicked.connect(self.get_save_path)
 
         # Назначаем на клик по чекбоксу функции, которые добавляют/убирают из списка поиск в системах
         self.ui.checkBox_Google.clicked.connect(self.settings_google)
         self.ui.checkBox_Yandex.clicked.connect(self.settings_yandex)
 
-        # Назначаем на клик по радиобтн функцию, которая изменяет значение переменной browser в соответствии с значением
-        self.ui.radioButton_GoogleChrome.clicked.connect(self.set_browser)
-        self.ui.radioButton_Firefox.clicked.connect(self.set_browser)
-
-        # Назначаем клик по чекбоксам при выборе методов нарезания скринов
-        self.ui.checkBox_AllResults.clicked.connect(self.settings_all_results)
-        self.ui.checkBox_BlockOfAds.clicked.connect(self.settings_block_of_ads)
-        self.ui.checkBox_JustAd.clicked.connect(self.settings_just_ad)
-
         # Значения элементов интерфейса по умолчанию
-        self.ui.label_WaitFinish.setText('Нажмите "Начать" для выполнения программы')
+        self.ui.label_Info.setText('Нажмите "Начать" для выполнения программы')
         self.ui.checkBox_Yandex.setChecked(True)
-        self.ui.radioButton_GoogleChrome.setChecked(True)
-        self.ui.checkBox_AllResults.setChecked(True)
+        self.ui.radioButton_Windowscreen.setChecked(True)
 
         # Вызываем функции, чтобы значения по умолчанию добавились в массивы
-        self.settings_all_results()
-        self.set_browser()
         self.settings_yandex()
 
         # Заглушки, пока функционал не готов
         self.ui.checkBox_Yandex.setDisabled(True)
-        self.ui.checkBox_AllResults.setDisabled(True)
-        self.ui.radioButton_GoogleChrome.setDisabled(True)
-
         self.ui.checkBox_Google.setVisible(False)
-        self.ui.radioButton_Firefox.setVisible(False)
-        self.ui.checkBox_BlockOfAds.setVisible(False)
-        self.ui.checkBox_JustAd.setVisible(False)
         self.ui.checkBox_Google.setDisabled(True)
-        self.ui.radioButton_Firefox.setDisabled(True)
-        self.ui.checkBox_BlockOfAds.setDisabled(True)
-        self.ui.checkBox_JustAd.setDisabled(True)
+        self.ui.pushButton_Cancel.setDisabled(True)
+        self.ui.pushButton_Cancel.setVisible(False)
 
         # Временный текст
 #         self.ui.textEdit_Requests.setText("""шины
@@ -117,45 +103,6 @@ class MyWin(QtWidgets.QMainWindow):
     def get_save_path(self):
         self.save_path = QtWidgets.QFileDialog.getExistingDirectory()
         self.ui.label_SavePath.setText('Путь: {0}'.format(self.save_path))
-
-    # Ф-ии нарезания скриншотов
-    def cut_all_results(self, driver, folder_path, search, request, site_address):
-        driver.save_screenshot('{0}\\{1}_{2}_{3}_{4}'.format(folder_path, search, request, site_address, 'all_results.png'))
-
-    def cut_block_of_ads(self):
-        pass
-
-    def cut_just_ad(self):
-        pass
-
-    # Ф-ии добавляют/удаляют из списка способы нарезания скриншотов
-    def settings_block_of_ads(self):
-        if self.ui.checkBox_BlockOfAds.isChecked():
-            self.methods_of_screen.append(self.cut_block_of_ads)
-        else:
-            self.methods_of_screen.remove(self.cut_block_of_ads)
-
-    def settings_just_ad(self):
-        if self.ui.checkBox_JustAd.isChecked():
-            self.methods_of_screen.append(self.cut_just_ad)
-        else:
-            self.methods_of_screen.remove(self.cut_just_ad)
-
-    def settings_all_results(self):
-        if self.ui.checkBox_AllResults.isChecked():
-            self.methods_of_screen.append(self.cut_all_results)
-        else:
-            self.methods_of_screen.remove(self.cut_all_results)
-
-    # Функция изменяет значение browser
-    def set_browser(self):
-        print('бразуер установлен')
-        if self.ui.radioButton_GoogleChrome.isChecked():
-            self.browser = webdriver.Chrome
-            self.options = webdriver.ChromeOptions()
-            self.options.add_argument('window-size=1920x3800')
-        else:
-            self.browser = webdriver.Firefox
 
     # Функция добавляет/удаляет в/из списка url для поиска в яндексе
     def settings_yandex(self):
@@ -172,18 +119,19 @@ class MyWin(QtWidgets.QMainWindow):
             self.searchers.remove('https://www.google.com/search?q=')
 
     # Функция разбивает текст пользователя в поле Запросы на элементы массива и возвращает массив
-    def get_requests(self):
-        user_requests = self.ui.textEdit_Requests.toPlainText().split('\n')
-        for request in user_requests:
-            if request == '':
-                user_requests.remove(request)
+    def get_requests(self,text):
+        user_requests = []
+        temp = text.split('\n')
+        for request in temp:
+            if request != '':
+                user_requests.append(request)
         return user_requests
 
-    def get_sites_addresses(self):
+    def get_sites_addresses(self, text):
         clear_sites_addresses = []
         pattern = r'\w+-*\w+\.\w+-*\w+\.*\w*'
 
-        sites_addresses = self.ui.textEdit_SitesAddresses.toPlainText().split('\n')
+        sites_addresses = text.split('\n')
         print(sites_addresses)
 
         for site in sites_addresses:
@@ -397,71 +345,80 @@ class MyWin(QtWidgets.QMainWindow):
     def start_search(self):
         self.thread_instance.start()
 
+    def end_search(self):
+        self.thread_instance.stop()
+        self.ui.label_Info.setText('Поиск остановлен')
+
     # Функция срабатывает при нажатии на кнопку Старт
     def start_searching(self):
-        self.ui.label_WaitFinish.setText('Программа выполняется. Подождите...')
-        print('Текущие настройки:')
-        print(self.searchers)
-        print(self.browser)
-        print(self.methods_of_screen)
-        print(self.save_path)
+        self.ui.pushButton_Start.setDisabled(True)
+        self.ui.label_Info.setText('Программа выполняется. Подождите...')
 
         # Адреса сайтов, который ввел пользователь
-        sites_addresses = self.get_sites_addresses()
+        sites_addresses = self.get_sites_addresses(self.ui.textEdit_SitesAddresses.toPlainText())
+        print(sites_addresses)
 
         # Массив с запросами для поиска
-        user_requests = self.get_requests()
+        user_requests = self.get_requests(self.ui.textEdit_Requests.toPlainText())
         print(user_requests)
 
-        #Словарь с регионами и кодами lr
+        # Словарь с регионами и кодами lr
         regions = self.get_regions_from_table()
         print(regions)
+
+        # Проверка ввел ли пользователь все данные
+        if len(user_requests) == 0:
+            self.ui.label_Info.setText('Ошибка! Вы не указали запросы!')
+            return ''
+        elif len(sites_addresses) == 0:
+            self.ui.label_Info.setText('Ошибка! Вы не указали сайты!')
+            return ''
+        elif self.save_path is None or self.save_path == '':
+            self.ui.label_Info.setText('Ошибка! Вы не указали путь для сохранения!')
+            return ''
 
         print(len(user_requests))
         print(len(regions))
 
         # По умолчанию есть ограничение на кол-во запросов
         # Если выбрать соответсвующий чекбокс, то проверки на кол-во запросов не будет
-        if self.ui.checkBox_NoLimits.isChecked() == False:
+        if not self.ui.checkBox_NoLimits.isChecked():
             # Проверка на большое кол-во обращений к яндексу
             if len(user_requests) * len(regions) > 20:
-                self.ui.label_WaitFinish.setText("""Кол-во обращений (запросы * регионы) к яндексу превышает 20! 
-    Сделайте поменьше, пожалуйста""")
+                self.ui.label_Info.setText("""Кол-во обращений (запросы * регионы) к яндексу превышает 20! 
+        Сделайте поменьше, пожалуйста""")
                 return ''
 
-        # Проверка ввел ли пользователь все данные
-        if user_requests[0] == '' or sites_addresses[0] == '' or self.save_path == None or self.save_path == '':
-            self.ui.label_WaitFinish.setText('Ошибка! Вы не указали запросы, сайт или путь для сохранения!')
-            return ''
+        print(self.searchers)
+        print(self.save_path)
 
         # Путь для создания папки со скриншотами
         # TODO брать с путь с интерфейса, который указал пользователь
-        # folder_path = 'C:\\Users\\{0}\\Desktop\\'.format(os.getlogin()) + site_address
-        folder_path = '{0}\\AH {1}'.format(self.save_path, sites_addresses[0])
+        folder_path = '{0}\\AH_{1}_{2}'.format(self.save_path, sites_addresses[0], datetime.now().strftime('%H_%M_%S'))
         self.ui.label_SavePath.setText('Путь: {0}'.format(folder_path))
         if not os.path.exists(folder_path):
             os.mkdir(folder_path)
 
-        # Массив для сбора статистики (спец, сео, гарант)
+        # Массив для сбора статистики
         statistics = []
 
-        '''Начинаем перебирать системы поиска, затем открываем бразуер, формируем запрос,
-        на странцие ищем рекламу, и если находим перебираем список с методами нарезки скринов'''
+        # ВОТ ТУТ НАДО НАСТРОЙКИ ДЛЯ БРАУЗЕРА ЗАТЕМ ВЕТВЛЕНИЕ
 
-        print(self.ui.checkBox_WindowMode.isChecked())
+        # Настройки браузера
+        options = webdriver.ChromeOptions()
 
-        if self.ui.checkBox_WindowMode.isChecked() == False:
-            self.options.add_argument('headless')
-            print('браузер спрятан')
-
-        options = self.options
+        # Оконный режим
+        if self.ui.radioButton_Windowscreen.isChecked():
+            options.add_argument('start-maximized')
+            print('браузер открыт')
+        # Окно скрыто,скрин полный
+        elif self.ui.radioButton_Fullscreen.isChecked():
+            options.add_argument('window-size=1920x3800')
+            options.add_argument('headless')
+            print('браузер скрыт')
 
         # Открываем браузер с заданными настройками
-        driver = self.browser(options=options)  # options=options
-
-        if self.ui.checkBox_WindowMode.isChecked() == True:
-            driver.maximize_window()
-            print('раскрыл окно')
+        driver = webdriver.Chrome(options=options)  # options=options
 
         # Перебор всех поисковых систем
         for url in self.searchers:
@@ -470,24 +427,22 @@ class MyWin(QtWidgets.QMainWindow):
 
             # Перебор регионов, по которым ведётся поиск
             for region, lr in regions.items():
-                print(region)
+                print(f'region={region}')
                 print(lr)
 
                 # Перебор всех поисковых запросов
                 for request in user_requests:
                     current_url = url.format(request, lr)
-                    print(current_url)
                     driver.get(current_url)
+                    print(f'current_url={current_url}')
 
                     # TODO продумать этот момент для гугла
                     # Находим все элементы выдачи на странице
                     web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
                     # Находим все адреса сайтов в выдаче
                     #sites_on_page = driver.find_elements_by_xpath('//li[@class="serp-item"]/div/div/div/a/b')
-
                     for site_address in sites_addresses:
-
-                        self.ui.label_WaitFinish.setText('Выполняю запрос: {0} - {1} - {2}'.format(region, request, site_address))
+                        self.ui.label_Info.setText('Выполняю запрос: {0} - {1} - {2}'.format(region, request, site_address))
                         results = []
 
                         # Лист для позиций искомого сайта в выдаче
@@ -496,47 +451,41 @@ class MyWin(QtWidgets.QMainWindow):
                         screen_name = 'Результатов нет'
 
                         # TODO в каждом результате много данных и в них программа ищет наличие сайта
-                        # TODO для оптимищации следует собирать со страницы только адреса, сравнивать их с нашим сайтом (сделать потом)
+                        # TODO для оптимизации следует собирать со страницы только адреса, сравнивать их с нашим сайтом
                         # Перебор реузльтатов выдачи поиска
+                        #Режим оконного скрина
+                        if self.ui.radioButton_Windowscreen.isChecked():
 
-                        if self.ui.checkBox_WindowMode.isChecked() == True:
-                            print('скрины в окнном режиме')
+                            for index, r in enumerate(web_results, start=1):
+                                results.append((index, r.text, r.location, r.size))
+                            positions, block_of_ads = self.get_positions(results, site_address)
+
+                            # Только спец размещение
                             for i in range(0, 4):
                                 if site_address in web_results[i].text and 'реклама' in web_results[i].text:
-
-                                    for index, r in enumerate(web_results, start=1):
-                                        results.append((index, r.text, r.location, r.size))
-
                                     print(web_results[i].text)
                                     driver.execute_script("window.scrollTo(0, {0})".format(web_results[i].location['y']-100))
 
-                                    screen_name = '{0}\\{1}_{2}_{3}_{4}_{5}'.format(folder_path, search, region,
-                                                                                    request, site_address,
-                                                                                    'window_mode.png')
-
+                                    screen_name = f'{folder_path}\\{search}_{region}_{request}_{site_address}_window_screen.png'
                                     print(screen_name)
-
                                     sleep(1)
-
-                                    # #скрин
+                                    #скрин
                                     img = ImageGrab.grab().save(screen_name, 'PNG')
                                     img = Image.open(screen_name)
                                     new_img = img.crop((0, 120, img.width, img.height))
 
                                     # Рисуем на скрине
-                                    self.ui.label_WaitFinish.setText(
+                                    self.ui.label_Info.setText(
                                         'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request,
                                                                                                    site_address))
-
                                     draw = ImageDraw.Draw(new_img)
                                     draw.rectangle((116, 0 + 95, web_results[i].size['width'] + 116, web_results[i].size['height'] + 95),
                                                    outline=(255, 0, 0, 255),
                                                    width=2)
                                     new_img.save(screen_name, 'PNG')
-
-                                    positions, block_of_ads = self.get_positions(results, site_address)
                                     break
-                        else:
+                        #Режим полного скрина
+                        elif self.ui.radioButton_Fullscreen.isChecked():
                             print('фулл скрин')
                             for result in web_results:
                                 if site_address in result.text:
@@ -546,12 +495,8 @@ class MyWin(QtWidgets.QMainWindow):
                                     for index, result in enumerate(web_results, start=1):
                                         results.append((index, result.text, result.location, result.size))
 
-                                    # Перебор методов нарезания скриншотов
-                                    # for screen_cut in self.methods_of_screen:
-                                    #     screen_cut(driver, folder_path, search, request, site_address)
-
                                     # TODO тут с именем скриншота. Как его потом вытаскивать из функций
-                                    screen_name = '{0}\\{1}_{2}_{3}_{4}_{5}'.format(folder_path, search, region, request, site_address, 'all_results.png')
+                                    screen_name = f'{folder_path}\\{search}_{region}_{request}_{site_address}_full_screen.png'
                                     print(screen_name)
 
                                     driver.save_screenshot(screen_name)
@@ -559,9 +504,8 @@ class MyWin(QtWidgets.QMainWindow):
                                     positions, block_of_ads = self.get_positions(results, site_address)
 
                                     # Рисуем на скрине
-                                    self.ui.label_WaitFinish.setText('Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request, site_address))
+                                    self.ui.label_Info.setText('Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request, site_address))
                                     self.edit_screen(screen_name, results, positions, block_of_ads)
-
                                     break
 
                         # Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
@@ -577,11 +521,11 @@ class MyWin(QtWidgets.QMainWindow):
             print('закрыл драйвер')
 
         # Вот тут желательно перебрать скрины и обработать их
-        self.ui.label_WaitFinish.setText('Обрабатываю скриншоты')
+        self.ui.label_Info.setText('Обрабатываю скриншоты')
         # "тут"
 
         # Записываем статистику в файл
-        self.ui.label_WaitFinish.setText('Собираю статистику в файл')
+        self.ui.label_Info.setText('Собираю статистику в файл')
         self.edit_file_stat(statistics, folder_path)
         print('записал стату в файл')
 
@@ -589,8 +533,8 @@ class MyWin(QtWidgets.QMainWindow):
         os.system("TASKKILL /F /IM chromedriver.exe")
         print('закрыл chromedriver')
 
-        self.ui.label_WaitFinish.setText('Готово! ( ͡° ͜ʖ ͡°)')
-
+        self.ui.label_Info.setText('Готово! ( ͡° ͜ʖ ͡°)')
+        self.ui.pushButton_Start.setDisabled(False)
         # Проверка указал ли пользователь открывать папку
         if self.ui.checkBox_OpenFolder.isChecked():
             self.open_folder(folder_path)
@@ -600,6 +544,8 @@ class MyWin(QtWidgets.QMainWindow):
         if self.ui.checkBox_OpenExcelFile.isChecked():
             self.open_excel_file(folder_path)
             print('открыл файл')
+
+        self.thread_instance.stop()
 
 
 if __name__ == "__main__":
