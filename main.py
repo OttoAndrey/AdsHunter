@@ -3,7 +3,7 @@ import sys
 import re
 from datetime import datetime
 from functools import partial
-from time import sleep, gmtime, strftime
+from time import sleep
 
 from PIL import Image, ImageDraw, ImageFont, ImageGrab
 from PyQt5.QtCore import QThread
@@ -29,6 +29,7 @@ class SearchThread(QThread):
         self.running = True
 
     def stop(self):
+        self.mainwindow.ui.pushButton_Start.setDisabled(False)
         self.running = False
 
 
@@ -66,6 +67,27 @@ class MyWin(QtWidgets.QMainWindow):
         print(line_edits)
         print(self.ui.tableWidget.rowCount())
 
+        self.ui.textEdit_Requests.setToolTip("""Поле для ввода запросов.
+Одна строка - один запрос.
+Желательно без пустых строк.""")
+        self.ui.textEdit_SitesAddresses.setToolTip("""Поле для ввода адресов сайтов.
+Одна строка - один адрес.
+Например: test.ru
+Без http/https
+Без www.
+Без знаков после домена верхнего уровня.""")
+        self.ui.radioButton_Windowscreen.setToolTip("""Скриншоты размером с экран с панелью пуск""")
+        self.ui.radioButton_Fullscreen.setToolTip("""Скриншоты без панели пуск, но с полной страницей выдачи""")
+        self.ui.checkBox_AddTimeDateToScreen.setToolTip("""Имеет смысл только для fullscreen режима""")
+        self.ui.tableWidget.setToolTip("""Таблица для заполнения регионами.
+Если нет нужного города, то его можно добавить вручную
+Зайти в яндекс, поменять в левом верхнем углу местоположение
+Сделать любой тестовый запрос
+В адресной стркое найти параметр lr= (это будет всегда число)
+Вставить его в таблицу""")
+        self.ui.groupBox_SavePath.setToolTip("""Выберите область для сохранения результатов
+Программа автоматически создаст папку, в которую поместит скриншоты""")
+
         # Переменные для
         self.searchers = []  # для хранения всех систем поиска
         self.save_path = None  # путь для сохранения
@@ -93,11 +115,13 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui.checkBox_Google.setDisabled(True)
         self.ui.pushButton_Cancel.setDisabled(True)
         self.ui.pushButton_Cancel.setVisible(False)
+        self.ui.checkBox_NoLimits.setDisabled(True)
+        self.ui.checkBox_NoLimits.setVisible(False)
 
         # Временный текст
-#         self.ui.textEdit_Requests.setText("""шины
-# зимние шины""")
-#         self.ui.textEdit_SitesAddresses.setText("""baza.drom.ru""")
+        self.ui.textEdit_Requests.setText("""шины
+зимние шины""")
+        self.ui.textEdit_SitesAddresses.setText("""baza.drom.ru""")
 
     # Ф-ия присваивает переменным путь, который задаёт пользователь
     def get_save_path(self):
@@ -120,17 +144,19 @@ class MyWin(QtWidgets.QMainWindow):
 
     # Функция разбивает текст пользователя в поле Запросы на элементы массива и возвращает массив
     def get_requests(self,text):
-        user_requests = []
         temp = text.split('\n')
-        for request in temp:
-            if request != '':
-                user_requests.append(request)
+        user_requests = tuple(request for request in temp if request != '')
         return user_requests
+        # user_requests = []
+        # temp = text.split('\n')
+        # for request in temp:
+        #     if request != '':
+        #         user_requests.append(request)
+        # return user_requests
 
     def get_sites_addresses(self, text):
         clear_sites_addresses = []
         pattern = r'\w+-*\w+\.\w+-*\w+\.*\w*'
-
         sites_addresses = text.split('\n')
         print(sites_addresses)
 
@@ -139,12 +165,10 @@ class MyWin(QtWidgets.QMainWindow):
             if match:
                 match = match[0]
                 if match[0:4] == 'www.':
-                    match = match.replace(match[0:4], '')
-
+                    match = match[4:]
                 clear_sites_addresses.append(match)
-
         print(clear_sites_addresses)
-
+        clear_sites_addresses = tuple(site for site in clear_sites_addresses)
         return clear_sites_addresses
 
     # Функция вычисляет позицию сайта относительно блоков спец/сео/гарант
@@ -252,24 +276,16 @@ class MyWin(QtWidgets.QMainWindow):
                 lr = sheet['A' + str(index)].value
                 break
         wb.close()
-
         print(lr)
-
         self.ui.tableWidget.setItem(row, column, QTableWidgetItem(str(lr)))
 
     # Функция возвращает список с городами для пользовательского поиска
     def get_regions(self):
-
         # Сделать кортеж
-        regions = []
-
         wb = load_workbook('regions.xlsx')
         sheet = wb.active
-
         column_regions = sheet['B']
-        for cell in column_regions:
-            regions.append(cell.value)
-
+        regions = tuple(cell.value for cell in column_regions)
         print(regions)
         wb.close()
         return regions
@@ -295,7 +311,7 @@ class MyWin(QtWidgets.QMainWindow):
         return regions
 
     # Функция для создания файла по экселю и записи в него статистики
-    def edit_file_stat(self, statistics, folder_path):
+    def edit_file_stat(self, statistics, main_folder_path):
         # Открываем шаблон файл экселя для записи статистики
         wb = load_workbook('template.xlsx')
         sheet = wb.active
@@ -330,17 +346,18 @@ class MyWin(QtWidgets.QMainWindow):
                     cell.hyperlink = s
                     cell.style = 'Hyperlink'
 
-        wb.save('{0}\\statistics.xlsx'.format(folder_path))
+        wb.save('{0}\\statistics.xlsx'.format(main_folder_path))
+        wb.close()
 
     # Открывает папку, куда указал пользователь
-    def open_folder(self, folder_path):
-        folder_path = folder_path.replace('/', '\\')
-        os.system('explorer "{0}"'.format(folder_path))
+    def open_folder(self, main_folder_path):
+        main_folder_path = main_folder_path.replace('/', '\\')
+        os.system('explorer "{0}"'.format(main_folder_path))
 
     # Открывает excel файл со статистикой
-    def open_excel_file(self, folder_path):
-        folder_path = folder_path.replace('/', '\\')
-        os.system('explorer "{0}\\statistics.xlsx"'.format(folder_path))
+    def open_excel_file(self, main_folder_path):
+        main_folder_path = main_folder_path.replace('/', '\\')
+        os.system('explorer "{0}\\statistics.xlsx"'.format(main_folder_path))
 
     def start_search(self):
         self.thread_instance.start()
@@ -369,40 +386,30 @@ class MyWin(QtWidgets.QMainWindow):
         # Проверка ввел ли пользователь все данные
         if len(user_requests) == 0:
             self.ui.label_Info.setText('Ошибка! Вы не указали запросы!')
+            self.thread_instance.stop()
             return ''
         elif len(sites_addresses) == 0:
             self.ui.label_Info.setText('Ошибка! Вы не указали сайты!')
+            self.thread_instance.stop()
             return ''
         elif self.save_path is None or self.save_path == '':
             self.ui.label_Info.setText('Ошибка! Вы не указали путь для сохранения!')
+            self.thread_instance.stop()
             return ''
 
         print(len(user_requests))
         print(len(regions))
-
-        # По умолчанию есть ограничение на кол-во запросов
-        # Если выбрать соответсвующий чекбокс, то проверки на кол-во запросов не будет
-        if not self.ui.checkBox_NoLimits.isChecked():
-            # Проверка на большое кол-во обращений к яндексу
-            if len(user_requests) * len(regions) > 20:
-                self.ui.label_Info.setText("""Кол-во обращений (запросы * регионы) к яндексу превышает 20! 
-        Сделайте поменьше, пожалуйста""")
-                return ''
-
         print(self.searchers)
         print(self.save_path)
 
         # Путь для создания папки со скриншотами
-        # TODO брать с путь с интерфейса, который указал пользователь
-        folder_path = '{0}\\AH_{1}_{2}'.format(self.save_path, sites_addresses[0], datetime.now().strftime('%H_%M_%S'))
-        self.ui.label_SavePath.setText('Путь: {0}'.format(folder_path))
-        if not os.path.exists(folder_path):
-            os.mkdir(folder_path)
+        main_folder_path = '{0}\\AH_{1}_{2}'.format(self.save_path, sites_addresses[0], datetime.now().strftime('%H_%M_%S'))
+        self.ui.label_SavePath.setText('Путь: {0}'.format(main_folder_path))
+        if not os.path.exists(main_folder_path):
+            os.mkdir(main_folder_path)
 
         # Массив для сбора статистики
         statistics = []
-
-        # ВОТ ТУТ НАДО НАСТРОЙКИ ДЛЯ БРАУЗЕРА ЗАТЕМ ВЕТВЛЕНИЕ
 
         # Настройки браузера
         options = webdriver.ChromeOptions()
@@ -422,8 +429,14 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Перебор всех поисковых систем
         for url in self.searchers:
-            # TODO продумать как изменять search. Когда ищет по яндексу должен быть yandex, когда по гуглу должен быть google
-            search = 'yandex'
+            search = ''
+            if url == 'https://yandex.ru/search/?text={0}&lr={1}':
+                search = 'yandex'
+            else:
+                search = 'google'
+            # current_folder_path = f'{main_folder_path}\\{search}'
+            # if not os.path.exists(current_folder_path):
+            #     os.mkdir(current_folder_path)
 
             # Перебор регионов, по которым ведётся поиск
             for region, lr in regions.items():
@@ -466,7 +479,10 @@ class MyWin(QtWidgets.QMainWindow):
                                     print(web_results[i].text)
                                     driver.execute_script("window.scrollTo(0, {0})".format(web_results[i].location['y']-100))
 
-                                    screen_name = f'{folder_path}\\{search}_{region}_{request}_{site_address}_window_screen.png'
+                                    if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
+                                        os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
+
+                                    screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_window_screen.png'
                                     print(screen_name)
                                     sleep(1)
                                     #скрин
@@ -496,7 +512,7 @@ class MyWin(QtWidgets.QMainWindow):
                                         results.append((index, result.text, result.location, result.size))
 
                                     # TODO тут с именем скриншота. Как его потом вытаскивать из функций
-                                    screen_name = f'{folder_path}\\{search}_{region}_{request}_{site_address}_full_screen.png'
+                                    screen_name = f'{main_folder_path}\\{search}_{region}_{request}_{site_address}_full_screen.png'
                                     print(screen_name)
 
                                     driver.save_screenshot(screen_name)
@@ -526,7 +542,7 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Записываем статистику в файл
         self.ui.label_Info.setText('Собираю статистику в файл')
-        self.edit_file_stat(statistics, folder_path)
+        self.edit_file_stat(statistics, main_folder_path)
         print('записал стату в файл')
 
         # Закрывает процесс chromedriver
@@ -534,15 +550,14 @@ class MyWin(QtWidgets.QMainWindow):
         print('закрыл chromedriver')
 
         self.ui.label_Info.setText('Готово! ( ͡° ͜ʖ ͡°)')
-        self.ui.pushButton_Start.setDisabled(False)
         # Проверка указал ли пользователь открывать папку
         if self.ui.checkBox_OpenFolder.isChecked():
-            self.open_folder(folder_path)
+            self.open_folder(main_folder_path)
             print('открыл папку')
 
         # Проверка указал ли пользователь открывать excel файл
         if self.ui.checkBox_OpenExcelFile.isChecked():
-            self.open_excel_file(folder_path)
+            self.open_excel_file(main_folder_path)
             print('открыл файл')
 
         self.thread_instance.stop()
