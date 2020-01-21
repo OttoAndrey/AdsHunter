@@ -1,6 +1,6 @@
 import os
-import sys
 import re
+import sys
 from datetime import datetime
 from functools import partial
 from time import sleep
@@ -42,30 +42,48 @@ class MyWin(QtWidgets.QMainWindow):
         # Экземпляр потока
         self.thread_instance = SearchThread(self)
 
-        # Настройки таблицы
+        # Настрйоки таблицы для Гугла
+        self.ui.tableWidget_Google.setColumnCount(1)
+        self.ui.tableWidget_Google.setRowCount(5)
+
+        # Настройки таблицы для Яндекса
         self.ui.tableWidget.setColumnCount(2)
         self.ui.tableWidget.setRowCount(5)
 
-        # Массив с регионами из эксель файла
-        regions = self.get_regions()
-        print(regions)
+        # Массив с регионами Гугла из эксель файла
+        self.gl_regions = self.get_gl_regions()
+        print(self.gl_regions)
 
-        # Настройки завершателя слов
-        completer = QCompleter(regions)
-        completer.setCaseSensitivity(False)
+        #Настройки завершателя слов для Гугла
+        completer_gl = QCompleter([*self.gl_regions.keys()])
+        completer_gl.setCaseSensitivity(False)
+
+        # Массив с регионами Яндекса из эксель файла
+        yd_regions = self.get_yd_regions()
+        print(yd_regions)
+
+        # Настройки завершателя слов для Яндекса
+        completer_yd = QCompleter(yd_regions)
+        completer_yd.setCaseSensitivity(False)
 
         # В ячейки таблицы первого столбца устанавливаем QLineEdit, в которые пользователь будет писать регионы
         line_edits = []
         for i in range(0, self.ui.tableWidget.rowCount()):
             line_edits.append(QtWidgets.QLineEdit())
             # Устанавливаем QLineEdit QCompleter, чтобы он завершал слова, которые пишет пользователь
-            line_edits[i].setCompleter(completer)
+            line_edits[i].setCompleter(completer_yd)
             self.ui.tableWidget.setCellWidget(i, 0, line_edits[i])
             # Передаём частями в функцию данные о тексте, о номере строки и столбца, в которой находится QLineEdit
             line_edits[i].editingFinished.connect(partial(self.get_lr, cell=self.ui.tableWidget.cellWidget(i, 0), row=i, column=1))
 
         print(line_edits)
         print(self.ui.tableWidget.rowCount())
+
+        line_edits_gl = []
+        for i in range(0, self.ui.tableWidget_Google.rowCount()):
+            line_edits_gl.append(QtWidgets.QLineEdit())
+            line_edits_gl[i].setCompleter(completer_gl)
+            self.ui.tableWidget_Google.setCellWidget(i, 0, line_edits_gl[i])
 
         self.ui.textEdit_Requests.setToolTip("""Поле для ввода запросов.
 Одна строка - один запрос.
@@ -110,18 +128,13 @@ class MyWin(QtWidgets.QMainWindow):
         self.settings_yandex()
 
         # Заглушки, пока функционал не готов
-        self.ui.checkBox_Yandex.setDisabled(True)
-        self.ui.checkBox_Google.setVisible(False)
-        self.ui.checkBox_Google.setDisabled(True)
         self.ui.pushButton_Cancel.setDisabled(True)
         self.ui.pushButton_Cancel.setVisible(False)
-        self.ui.checkBox_NoLimits.setDisabled(True)
-        self.ui.checkBox_NoLimits.setVisible(False)
 
-        # Временный текст
-        self.ui.textEdit_Requests.setText("""шины
-зимние шины""")
-        self.ui.textEdit_SitesAddresses.setText("""baza.drom.ru""")
+         # Временный текст
+        self.ui.textEdit_Requests.setText("""ноутбук""")
+        self.ui.textEdit_SitesAddresses.setText("""mvideo.ru
+citilink.ru""")
 
     # Ф-ия присваивает переменным путь, который задаёт пользователь
     def get_save_path(self):
@@ -134,25 +147,21 @@ class MyWin(QtWidgets.QMainWindow):
             self.searchers.append('https://yandex.ru/search/?text={0}&lr={1}')
         else:
             self.searchers.remove('https://yandex.ru/search/?text={0}&lr={1}')
+        print(self.searchers)
 
     # Функция добавляет/удаляет в/из списка url для поиска в гугле
     def settings_google(self):
         if self.ui.checkBox_Google.isChecked():
-            self.searchers.append('https://www.google.com/search?q=')
+            self.searchers.append('https://www.google.com/search?q={0}&uule={1}')
         else:
-            self.searchers.remove('https://www.google.com/search?q=')
+            self.searchers.remove('https://www.google.com/search?q={0}&uule={1}')
+        print(self.searchers)
 
     # Функция разбивает текст пользователя в поле Запросы на элементы массива и возвращает массив
     def get_requests(self,text):
         temp = text.split('\n')
         user_requests = tuple(request for request in temp if request != '')
         return user_requests
-        # user_requests = []
-        # temp = text.split('\n')
-        # for request in temp:
-        #     if request != '':
-        #         user_requests.append(request)
-        # return user_requests
 
     def get_sites_addresses(self, text):
         clear_sites_addresses = []
@@ -193,7 +202,7 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Распределяем результаты по массивам
         for result in results:
-            if 'реклама' in result[1]:
+            if 'реклама' in result[1] or 'Реклама' in result[1]:
                 if temp:
                     garant.append(result)
                 else:
@@ -279,12 +288,25 @@ class MyWin(QtWidgets.QMainWindow):
         print(lr)
         self.ui.tableWidget.setItem(row, column, QTableWidgetItem(str(lr)))
 
+    def get_gl_regions(self):
+        wb = load_workbook('google_regions.xlsx')
+        sheet = wb.active
+        regions_name = sheet['A']
+        uule_code = sheet['B']
+
+        # проверить
+        regions = {a.value: b.value for a, b in zip(regions_name, uule_code)}
+
+        wb.close()
+
+        return regions
+
     # Функция возвращает список с городами для пользовательского поиска
-    def get_regions(self):
-        # Сделать кортеж
+    def get_yd_regions(self):
         wb = load_workbook('regions.xlsx')
         sheet = wb.active
         column_regions = sheet['B']
+        # переделать в словарь и затем далее по коду
         regions = tuple(cell.value for cell in column_regions)
         print(regions)
         wb.close()
@@ -298,7 +320,6 @@ class MyWin(QtWidgets.QMainWindow):
                 # Пропускаем, если пользователь в таблице оставил пустые строки или города с None
                 if self.ui.tableWidget.cellWidget(row, 0).text() == '' or self.ui.tableWidget.item(row, 1).text() == 'None':
                     continue
-
                 city = self.ui.tableWidget.cellWidget(row, 0).text()
                 lr = self.ui.tableWidget.item(row, 1).text()
                 regions[city] = lr
@@ -310,18 +331,71 @@ class MyWin(QtWidgets.QMainWindow):
 
         return regions
 
+    def get_regions_from_gl_table(self):
+        regions = {}
+        for row in range(0, 5):
+            try:
+                if self.ui.tableWidget_Google.cellWidget(row, 0).text() == '':
+                    continue
+                city = self.ui.tableWidget_Google.cellWidget(row, 0).text()
+                uule = self.gl_regions[city]
+                regions[city] = uule
+            except:
+                pass
+        if len(regions.items()) == 0:
+            regions['current'] = ''
+
+        return regions
+
     # Функция для создания файла по экселю и записи в него статистики
     def edit_file_stat(self, statistics, main_folder_path):
+        # Разбиваем статистику на два массива яндекса и гугла
+        yd_statistics = []
+        gl_statistics = []
+        for stat in statistics:
+            if stat[7] == 'yandex':
+                yd_statistics.append(stat)
+            elif stat[7] == 'google':
+                gl_statistics.append(stat)
+
         # Открываем шаблон файл экселя для записи статистики
         wb = load_workbook('template.xlsx')
         sheet = wb.active
 
         start = 'A3'
-        end = 'G{0}'.format(len(statistics) + 3)
+        end = f'G{len(yd_statistics)+3}'
 
-        for cellObj, stat in zip(sheet[start:end], statistics):
+        for cellObj, stat in zip(sheet[start:end], yd_statistics):
             for index, (cell, s) in enumerate(zip(cellObj, stat)):
+                # 0 - Регион
+                # 2 - Сайт
+                if index == 0 or index == 2:
+                    cell.value = s
 
+                # 1 - Запрос. Если результатов нет, то красим ячейку в красный
+                elif index == 1:
+                    if stat[6] == 'Результатов нет':
+                        cell.fill = PatternFill(start_color='da9694', fill_type='solid')
+                    cell.value = s
+
+                # 3, 4, 5 - Значения позиций на странице. Если объявления нет, то ставит прочерк
+                elif index == 3 or index == 4 or index == 5:
+                    if s[1] == 0:
+                        cell.value = '-'
+                    else:
+                        cell.value = s[1]
+
+                # 6 - Гиперссылка на скриншот
+                elif index == 6:
+                    cell.value = s
+                    cell.hyperlink = s
+                    cell.style = 'Hyperlink'
+
+        start = 'H3'
+        end = f'N{len(gl_statistics)+3}'
+
+        for cellObj, stat in zip(sheet[start:end], gl_statistics):
+            for index, (cell, s) in enumerate(zip(cellObj, stat)):
                 # 0 - Регион
                 # 2 - Сайт
                 if index == 0 or index == 2:
@@ -379,9 +453,13 @@ class MyWin(QtWidgets.QMainWindow):
         user_requests = self.get_requests(self.ui.textEdit_Requests.toPlainText())
         print(user_requests)
 
-        # Словарь с регионами и кодами lr
-        regions = self.get_regions_from_table()
-        print(regions)
+        # Словарь с регионами и кодами lr для Яндекса
+        yd_regions = self.get_regions_from_table()
+        print(yd_regions)
+
+        # Словарь с регионами и кодами для Google
+        gl_regions = self.get_regions_from_gl_table()
+        print(gl_regions)
 
         # Проверка ввел ли пользователь все данные
         if len(user_requests) == 0:
@@ -398,7 +476,7 @@ class MyWin(QtWidgets.QMainWindow):
             return ''
 
         print(len(user_requests))
-        print(len(regions))
+        print(len(yd_regions))
         print(self.searchers)
         print(self.save_path)
 
@@ -429,29 +507,46 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Перебор всех поисковых систем
         for url in self.searchers:
+            regions = {}
             search = ''
+            padding = 0
             if url == 'https://yandex.ru/search/?text={0}&lr={1}':
                 search = 'yandex'
-            else:
+                regions = yd_regions
+                padding = 100
+                x_padding = 116
+                y_padding = 95
+            elif url == 'https://www.google.com/search?q={0}&uule={1}':
                 search = 'google'
+                regions = gl_regions
+                padding = 60
+                x_padding = 165
+                y_padding = 55
             # current_folder_path = f'{main_folder_path}\\{search}'
             # if not os.path.exists(current_folder_path):
             #     os.mkdir(current_folder_path)
 
             # Перебор регионов, по которым ведётся поиск
-            for region, lr in regions.items():
+            for region, code in regions.items():
                 print(f'region={region}')
-                print(lr)
+                print(code)
 
                 # Перебор всех поисковых запросов
                 for request in user_requests:
-                    current_url = url.format(request, lr)
+                    current_url = url.format(request, code)
                     driver.get(current_url)
                     print(f'current_url={current_url}')
 
                     # TODO продумать этот момент для гугла
                     # Находим все элементы выдачи на странице
-                    web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
+                    if search == 'yandex':
+                        web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
+                    elif search == 'google':
+                        top_results = driver.find_elements_by_xpath('//*[@id="tads"]/ol/li')
+                        seo_results = driver.find_elements_by_xpath('//div[@class="rc"]')
+                        garant_results = driver.find_elements_by_xpath('//*[@id="tadsb"]/ol/li')
+                        web_results = top_results + seo_results + garant_results
+
                     # Находим все адреса сайтов в выдаче
                     #sites_on_page = driver.find_elements_by_xpath('//li[@class="serp-item"]/div/div/div/a/b')
                     for site_address in sites_addresses:
@@ -468,16 +563,16 @@ class MyWin(QtWidgets.QMainWindow):
                         # Перебор реузльтатов выдачи поиска
                         #Режим оконного скрина
                         if self.ui.radioButton_Windowscreen.isChecked():
-
                             for index, r in enumerate(web_results, start=1):
                                 results.append((index, r.text, r.location, r.size))
                             positions, block_of_ads = self.get_positions(results, site_address)
 
                             # Только спец размещение
                             for i in range(0, 4):
-                                if site_address in web_results[i].text and 'реклама' in web_results[i].text:
+                                if site_address in web_results[i].text and ('реклама' in web_results[i].text or 'Реклама' in web_results[i].text):
                                     print(web_results[i].text)
-                                    driver.execute_script("window.scrollTo(0, {0})".format(web_results[i].location['y']-100))
+                                    if i != 0 or search != 'google':
+                                        driver.execute_script("window.scrollTo(0, {0})".format(web_results[i].location['y']-padding))
 
                                     if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
                                         os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
@@ -495,9 +590,26 @@ class MyWin(QtWidgets.QMainWindow):
                                         'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request,
                                                                                                    site_address))
                                     draw = ImageDraw.Draw(new_img)
-                                    draw.rectangle((116, 0 + 95, web_results[i].size['width'] + 116, web_results[i].size['height'] + 95),
-                                                   outline=(255, 0, 0, 255),
-                                                   width=2)
+
+                                    if search == 'yandex':
+                                        draw.rectangle((x_padding, 0 + y_padding,
+                                                        web_results[i].size['width'] + x_padding,
+                                                        web_results[i].size['height'] + y_padding),
+                                                       outline=(255, 0, 0, 255),
+                                                       width=2)
+                                    elif search == 'google':
+                                        if i == 0:
+                                            draw.rectangle((web_results[i].location['x'] - 2, web_results[i].location['y'] - 2,
+                                                            web_results[i].size['width'] + web_results[i].location['x'],
+                                                            web_results[i].size['height'] + web_results[i].location['y']),
+                                                           outline=(255, 0, 0, 255),
+                                                           width=2)
+                                        else:
+                                            draw.rectangle((x_padding, 0 + y_padding,
+                                                            web_results[i].size['width'] + x_padding,
+                                                            web_results[i].size['height'] + y_padding),
+                                                           outline=(255, 0, 0, 255),
+                                                           width=2)
                                     new_img.save(screen_name, 'PNG')
                                     break
                         #Режим полного скрина
@@ -530,11 +642,11 @@ class MyWin(QtWidgets.QMainWindow):
                         garant = positions[2]
 
                         # Добавляем данные в один большой, чтобы потом записать всё в эксель файл
-                        statistics.append((region, request, site_address, spec, seo, garant, screen_name))
+                        statistics.append((region, request, site_address, spec, seo, garant, screen_name, search))
 
-            # Закрываем браузер
-            driver.close()
-            print('закрыл драйвер')
+        # Закрываем браузер
+        driver.close()
+        print('закрыл драйвер')
 
         # Вот тут желательно перебрать скрины и обработать их
         self.ui.label_Info.setText('Обрабатываю скриншоты')
