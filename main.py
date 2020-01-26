@@ -103,6 +103,7 @@ class MyWin(QtWidgets.QMainWindow):
 Сделать любой тестовый запрос
 В адресной стркое найти параметр lr= (это будет всегда число)
 Вставить его в таблицу""")
+        self.ui.tableWidget_Google.setToolTip("""Вводить на латинице""")
         self.ui.groupBox_SavePath.setToolTip("""Выберите область для сохранения результатов
 Программа автоматически создаст папку, в которую поместит скриншоты""")
 
@@ -132,9 +133,9 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui.pushButton_Cancel.setVisible(False)
 
          # Временный текст
-        self.ui.textEdit_Requests.setText("""ноутбук""")
-        self.ui.textEdit_SitesAddresses.setText("""mvideo.ru
-citilink.ru""")
+#         self.ui.textEdit_Requests.setText("""ноутбук""")
+#         self.ui.textEdit_SitesAddresses.setText("""mvideo.ru
+# citilink.ru""")
 
     # Ф-ия присваивает переменным путь, который задаёт пользователь
     def get_save_path(self):
@@ -623,8 +624,11 @@ citilink.ru""")
                                     for index, result in enumerate(web_results, start=1):
                                         results.append((index, result.text, result.location, result.size))
 
+                                    if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
+                                        os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
+
                                     # TODO тут с именем скриншота. Как его потом вытаскивать из функций
-                                    screen_name = f'{main_folder_path}\\{search}_{region}_{request}_{site_address}_full_screen.png'
+                                    screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_full_screen.png'
                                     print(screen_name)
 
                                     driver.save_screenshot(screen_name)

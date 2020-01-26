@@ -160,7 +160,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "AdsHunter Alpha v0.4"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "AdsHunter Alpha v0.5"))
         self.pushButton_Start.setText(_translate("MainWindow", "Начать"))
         self.groupBox_OtherSettings.setTitle(_translate("MainWindow", "Другие настройки"))
         self.checkBox_AddTimeDateToScreen.setText(_translate("MainWindow", "Добавить дату и время на скрин"))
