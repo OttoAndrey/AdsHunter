@@ -7,6 +7,7 @@ from time import sleep
 
 from PIL import Image, ImageDraw, ImageFont, ImageGrab
 from PyQt5.QtCore import QThread
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QCompleter, QTableWidgetItem
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
@@ -38,6 +39,14 @@ class MyWin(QtWidgets.QMainWindow):
         QtWidgets.QWidget.__init__(self, parent)
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+
+        self.setWindowIcon(QIcon('logo.png'))
+
+        self.lbl = QtWidgets.QLabel(self)
+        self.pix = QtGui.QPixmap('logo.png')
+        self.lbl.setPixmap(self.pix)
+        self.lbl.resize(500, 500)
+        self.lbl.move(1280, 600)
 
         # Экземпляр потока
         self.thread_instance = SearchThread(self)
@@ -122,11 +131,8 @@ class MyWin(QtWidgets.QMainWindow):
 
         # Значения элементов интерфейса по умолчанию
         self.ui.label_Info.setText('Нажмите "Начать" для выполнения программы')
-        self.ui.checkBox_Yandex.setChecked(True)
-        self.ui.radioButton_Windowscreen.setChecked(True)
-
-        # Вызываем функции, чтобы значения по умолчанию добавились в массивы
-        self.settings_yandex()
+        self.ui.tableWidget_Google.setDisabled(True)
+        self.ui.tableWidget.setDisabled(True)
 
         # Заглушки, пока функционал не готов
         self.ui.pushButton_Cancel.setDisabled(True)
@@ -146,16 +152,20 @@ class MyWin(QtWidgets.QMainWindow):
     def settings_yandex(self):
         if self.ui.checkBox_Yandex.isChecked():
             self.searchers.append('https://yandex.ru/search/?text={0}&lr={1}')
+            self.ui.tableWidget.setDisabled(False)
         else:
             self.searchers.remove('https://yandex.ru/search/?text={0}&lr={1}')
+            self.ui.tableWidget.setDisabled(True)
         print(self.searchers)
 
     # Функция добавляет/удаляет в/из списка url для поиска в гугле
     def settings_google(self):
         if self.ui.checkBox_Google.isChecked():
             self.searchers.append('https://www.google.com/search?q={0}&uule={1}')
+            self.ui.tableWidget_Google.setDisabled(False)
         else:
             self.searchers.remove('https://www.google.com/search?q={0}&uule={1}')
+            self.ui.tableWidget_Google.setDisabled(True)
         print(self.searchers)
 
     # Функция разбивает текст пользователя в поле Запросы на элементы массива и возвращает массив
