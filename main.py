@@ -133,6 +133,7 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui.label_Info.setText('Нажмите "Начать" для выполнения программы')
         self.ui.tableWidget_Google.setDisabled(True)
         self.ui.tableWidget.setDisabled(True)
+        self.ui.radioButton_Windowscreen.setChecked(True)
 
         # Заглушки, пока функционал не готов
         self.ui.pushButton_Cancel.setDisabled(True)
@@ -512,6 +513,9 @@ class MyWin(QtWidgets.QMainWindow):
             options.add_argument('window-size=1920x3800')
             options.add_argument('headless')
             print('браузер скрыт')
+        if self.ui.radioButton_OnlyAd.isChecked():
+            options.add_argument('start-maximized')
+            print('браузер открыт')
 
         # Открываем браузер с заданными настройками
         driver = webdriver.Chrome(options=options)  # options=options
@@ -559,7 +563,7 @@ class MyWin(QtWidgets.QMainWindow):
                         web_results = top_results + seo_results + garant_results
 
                     # Находим все адреса сайтов в выдаче
-                    #sites_on_page = driver.find_elements_by_xpath('//li[@class="serp-item"]/div/div/div/a/b')
+                    # sites_on_page = driver.find_elements_by_xpath('//li[@class="serp-item"]/div/div/div/a/b')
                     for site_address in sites_addresses:
                         self.ui.label_Info.setText('Выполняю запрос: {0} - {1} - {2}'.format(region, request, site_address))
                         results = []
@@ -571,8 +575,8 @@ class MyWin(QtWidgets.QMainWindow):
 
                         # TODO в каждом результате много данных и в них программа ищет наличие сайта
                         # TODO для оптимизации следует собирать со страницы только адреса, сравнивать их с нашим сайтом
-                        # Перебор реузльтатов выдачи поиска
-                        #Режим оконного скрина
+                        # Перебор результатов выдачи поиска
+                        # Режим оконного скрина
                         if self.ui.radioButton_Windowscreen.isChecked():
                             for index, r in enumerate(web_results, start=1):
                                 results.append((index, r.text, r.location, r.size))
@@ -596,34 +600,35 @@ class MyWin(QtWidgets.QMainWindow):
                                     img = Image.open(screen_name)
                                     new_img = img.crop((0, 120, img.width, img.height))
 
-                                    # Рисуем на скрине
-                                    self.ui.label_Info.setText(
-                                        'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request,
-                                                                                                   site_address))
-                                    draw = ImageDraw.Draw(new_img)
+                                    if not self.ui.checkBox_WithoutFrame.isChecked():
+                                        # Рисуем на скрине
+                                        self.ui.label_Info.setText(
+                                            'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request,
+                                                                                                       site_address))
+                                        draw = ImageDraw.Draw(new_img)
 
-                                    if search == 'yandex':
-                                        draw.rectangle((x_padding, 0 + y_padding,
-                                                        web_results[i].size['width'] + x_padding,
-                                                        web_results[i].size['height'] + y_padding),
-                                                       outline=(255, 0, 0, 255),
-                                                       width=2)
-                                    elif search == 'google':
-                                        if i == 0:
-                                            draw.rectangle((web_results[i].location['x'] - 2, web_results[i].location['y'] - 2,
-                                                            web_results[i].size['width'] + web_results[i].location['x'],
-                                                            web_results[i].size['height'] + web_results[i].location['y']),
-                                                           outline=(255, 0, 0, 255),
-                                                           width=2)
-                                        else:
+                                        if search == 'yandex':
                                             draw.rectangle((x_padding, 0 + y_padding,
                                                             web_results[i].size['width'] + x_padding,
                                                             web_results[i].size['height'] + y_padding),
                                                            outline=(255, 0, 0, 255),
                                                            width=2)
-                                    new_img.save(screen_name, 'PNG')
+                                        elif search == 'google':
+                                            if i == 0:
+                                                draw.rectangle((web_results[i].location['x'] - 2, web_results[i].location['y'] - 2,
+                                                                web_results[i].size['width'] + web_results[i].location['x'],
+                                                                web_results[i].size['height'] + web_results[i].location['y']),
+                                                               outline=(255, 0, 0, 255),
+                                                               width=2)
+                                            else:
+                                                draw.rectangle((x_padding, 0 + y_padding,
+                                                                web_results[i].size['width'] + x_padding,
+                                                                web_results[i].size['height'] + y_padding),
+                                                               outline=(255, 0, 0, 255),
+                                                               width=2)
+                                        new_img.save(screen_name, 'PNG')
                                     break
-                        #Режим полного скрина
+                        # Режим полного скрина
                         elif self.ui.radioButton_Fullscreen.isChecked():
                             print('фулл скрин')
                             for result in web_results:
@@ -648,6 +653,35 @@ class MyWin(QtWidgets.QMainWindow):
                                     # Рисуем на скрине
                                     self.ui.label_Info.setText('Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request, site_address))
                                     self.edit_screen(screen_name, results, positions, block_of_ads)
+                                    break
+                        # Режим только рекламного блока
+                        elif self.ui.radioButton_OnlyAd.isChecked():
+                            for index, r in enumerate(web_results, start=1):
+                                results.append((index, r.text, r.location, r.size))
+                            positions, block_of_ads = self.get_positions(results, site_address)
+
+                            # Только спец размещение
+                            # for i in range(0, 4):
+                            for i in range(0, len(web_results)):
+                                if site_address in web_results[i].text and (
+                                        'реклама' in web_results[i].text or 'Реклама' in web_results[i].text):
+                                    print(web_results[i].text)
+                                    if i != 0 or search != 'google':
+                                        driver.execute_script(
+                                            "window.scrollTo(0, {0})".format(web_results[i].location['y'] - padding))
+
+                                    if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
+                                        os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
+
+                                    screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_window_screen.png'
+                                    print(screen_name)
+                                    sleep(1)
+                                    # скрин
+                                    img = ImageGrab.grab().save(screen_name, 'PNG')
+                                    img = Image.open(screen_name)
+                                    new_img = img.crop((0, 120, img.width, img.height))
+                                    new_img = new_img.crop((0, 0, img.width, y_padding + web_results[i].size['height']))
+                                    new_img.save(screen_name, 'PNG')
                                     break
 
                         # Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
