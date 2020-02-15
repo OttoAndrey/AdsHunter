@@ -159,6 +159,9 @@ class Ui_MainWindow(object):
         self.tableWidget_Google.horizontalHeader().setMinimumSectionSize(100)
         self.tableWidget_Google.verticalHeader().setDefaultSectionSize(30)
         self.tableWidget_Google.verticalHeader().setMinimumSectionSize(30)
+        self.label_Warning = QtWidgets.QLabel(self.centralwidget)
+        self.label_Warning.setGeometry(QtCore.QRect(1000, 280, 351, 91))
+        self.label_Warning.setObjectName("label_Warning")
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(MainWindow)
@@ -166,7 +169,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "AdsHunter Alpha v0.5"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "AdsHunter Alpha v0.6"))
         self.pushButton_Start.setText(_translate("MainWindow", "Начать"))
         self.groupBox_OtherSettings.setTitle(_translate("MainWindow", "Другие настройки"))
         self.checkBox_AddTimeDateToScreen.setText(_translate("MainWindow", "Добавить дату и время на скрин"))
@@ -176,7 +179,7 @@ class Ui_MainWindow(object):
         self.groupBox_Cutters.setTitle(_translate("MainWindow", "Варианты скриншотов"))
         self.radioButton_Windowscreen.setText(_translate("MainWindow", "Windowscreen mode"))
         self.radioButton_Fullscreen.setText(_translate("MainWindow", "Fullscreen mode"))
-        self.radioButton_OnlyAd.setText(_translate("MainWindow", "Only ad mode"))
+        self.radioButton_OnlyAd.setText(_translate("MainWindow", "OnlyAd mode"))
         self.groupBox_2.setTitle(_translate("MainWindow", "Сайты"))
         self.groupBox.setTitle(_translate("MainWindow", "Поисковые запросы"))
         self.groupBox_Searches.setTitle(_translate("MainWindow", "Системы поиска"))
@@ -223,3 +226,4 @@ class Ui_MainWindow(object):
         __sortingEnabled = self.tableWidget_Google.isSortingEnabled()
         self.tableWidget_Google.setSortingEnabled(False)
         self.tableWidget_Google.setSortingEnabled(__sortingEnabled)
+        self.label_Warning.setText(_translate("MainWindow", "TextLabel"))

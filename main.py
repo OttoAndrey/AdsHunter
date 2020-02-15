@@ -8,7 +8,7 @@ from time import sleep
 from PIL import Image, ImageDraw, ImageFont, ImageGrab
 from PyQt5.QtCore import QThread
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QCompleter, QTableWidgetItem
+from PyQt5.QtWidgets import QCompleter, QTableWidgetItem, QDesktopWidget, QMainWindow, QWidget
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from selenium import webdriver
@@ -18,6 +18,7 @@ from interface import *
 
 class SearchThread(QThread):
     running = False
+
     def __init__(self, mainwindow):
         QThread.__init__(self)
         self.mainwindow = mainwindow
@@ -34,16 +35,32 @@ class SearchThread(QThread):
         self.running = False
 
 
-class MyWin(QtWidgets.QMainWindow):
+class Window(QWidget):
+    def __init__(self):
+        super(Window, self).__init__()
+        self.setWindowIcon(QIcon('pic/error.png'))
+        self.setWindowTitle('Внимание!')
+        self.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
+        self.setGeometry(QtCore.QRect(500, 500, 650, 150))
+        self.label_Warning = QtWidgets.QLabel(self)
+        self.label_Warning.move(30, 30)
+        self.label_Warning.setText("""Размер приложений и текста на вашем дисплее увеличены.
+При работе программы, обводящая рамка объявлений на скриншотах, будет отображаться некорректно.
+Во избежание данной ошибки установите значение в настройках Windows->Дисплей->Масштабирование 100%""")
+
+
+class MyWin(QMainWindow):
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
-        self.setWindowIcon(QIcon('logo.png'))
+        # Иконка приложения
+        self.setWindowIcon(QIcon('pic/logo.png'))
 
+        # Логотип в правом нижнем углу
         self.lbl = QtWidgets.QLabel(self)
-        self.pix = QtGui.QPixmap('logo.png')
+        self.pix = QtGui.QPixmap('pic/logo.png')
         self.lbl.setPixmap(self.pix)
         self.lbl.resize(500, 500)
         self.lbl.move(1280, 600)
@@ -51,7 +68,7 @@ class MyWin(QtWidgets.QMainWindow):
         # Экземпляр потока
         self.thread_instance = SearchThread(self)
 
-        # Настрйоки таблицы для Гугла
+        # Настройки таблицы для Гугла
         self.ui.tableWidget_Google.setColumnCount(1)
         self.ui.tableWidget_Google.setRowCount(5)
 
@@ -63,7 +80,7 @@ class MyWin(QtWidgets.QMainWindow):
         self.gl_regions = self.get_gl_regions()
         print(self.gl_regions)
 
-        #Настройки завершателя слов для Гугла
+        # Настройки завершателя слов для Гугла
         completer_gl = QCompleter([*self.gl_regions.keys()])
         completer_gl.setCaseSensitivity(False)
 
@@ -138,11 +155,21 @@ class MyWin(QtWidgets.QMainWindow):
         # Заглушки, пока функционал не готов
         self.ui.pushButton_Cancel.setDisabled(True)
         self.ui.pushButton_Cancel.setVisible(False)
+        self.ui.label_Warning.setVisible(False)
 
          # Временный текст
 #         self.ui.textEdit_Requests.setText("""ноутбук""")
-#         self.ui.textEdit_SitesAddresses.setText("""mvideo.ru
-# citilink.ru""")
+#         self.ui.textEdit_SitesAddresses.setText("""citilink.ru
+# mvideo.ru
+# asus.com""")
+
+        # Предупреждающее окно
+        q = QDesktopWidget().availableGeometry()
+        print(q.height())
+        if q.height() < 1040:
+            print(q.height())
+            self.w = Window()
+            self.w.show()
 
     # Ф-ия присваивает переменным путь, который задаёт пользователь
     def get_save_path(self):
@@ -250,13 +277,14 @@ class MyWin(QtWidgets.QMainWindow):
         print('нарисовал дату время')
 
         # Выделяем рамкой искомые запросы
-        for position in positions:
-            if position[0] != 0:
-                element = results[position[0] - 1]
-                print(element[2])
-                print(element[3])
-                draw.rectangle((element[2]['x'], element[2]['y'], element[2]['x'] + element[3]['width'],
-                                element[2]['y'] + element[3]['height']), outline=(255, 0, 0, 255), width=3, )
+        if not self.ui.checkBox_WithoutFrame.isChecked():
+            for position in positions:
+                if position[0] != 0:
+                    element = results[position[0] - 1]
+                    print(element[2])
+                    print(element[3])
+                    draw.rectangle((element[2]['x'], element[2]['y'], element[2]['x'] + element[3]['width'],
+                                    element[2]['y'] + element[3]['height']), outline=(255, 0, 0, 255), width=3,)
 
         # Рисуем на скрине нумерацию
         for result in results:
@@ -531,15 +559,14 @@ class MyWin(QtWidgets.QMainWindow):
                 padding = 100
                 x_padding = 116
                 y_padding = 95
+                search_size = 641
             elif url == 'https://www.google.com/search?q={0}&uule={1}':
                 search = 'google'
                 regions = gl_regions
                 padding = 60
                 x_padding = 165
                 y_padding = 55
-            # current_folder_path = f'{main_folder_path}\\{search}'
-            # if not os.path.exists(current_folder_path):
-            #     os.mkdir(current_folder_path)
+                search_size = 667
 
             # Перебор регионов, по которым ведётся поиск
             for region, code in regions.items():
@@ -552,7 +579,6 @@ class MyWin(QtWidgets.QMainWindow):
                     driver.get(current_url)
                     print(f'current_url={current_url}')
 
-                    # TODO продумать этот момент для гугла
                     # Находим все элементы выдачи на странице
                     if search == 'yandex':
                         web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
@@ -586,8 +612,11 @@ class MyWin(QtWidgets.QMainWindow):
                             for i in range(0, 4):
                                 if site_address in web_results[i].text and ('реклама' in web_results[i].text or 'Реклама' in web_results[i].text):
                                     print(web_results[i].text)
-                                    if i != 0 or search != 'google':
-                                        driver.execute_script("window.scrollTo(0, {0})".format(web_results[i].location['y']-padding))
+                                    if i == 0 and search == 'google':
+                                        driver.execute_script("window.scrollTo(0, 0)")
+                                    else:
+                                        driver.execute_script(
+                                            "window.scrollTo(0, {0})".format(web_results[i].location['y'] - padding))
 
                                     if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
                                         os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
@@ -598,6 +627,8 @@ class MyWin(QtWidgets.QMainWindow):
                                     #скрин
                                     img = ImageGrab.grab().save(screen_name, 'PNG')
                                     img = Image.open(screen_name)
+
+                                    # Отрезает верхнюю часть, где находится адресная строка, оставляет всё что ниже
                                     new_img = img.crop((0, 120, img.width, img.height))
 
                                     if not self.ui.checkBox_WithoutFrame.isChecked():
@@ -626,8 +657,9 @@ class MyWin(QtWidgets.QMainWindow):
                                                                 web_results[i].size['height'] + y_padding),
                                                                outline=(255, 0, 0, 255),
                                                                width=2)
-                                        new_img.save(screen_name, 'PNG')
+                                    new_img.save(screen_name, 'PNG')
                                     break
+
                         # Режим полного скрина
                         elif self.ui.radioButton_Fullscreen.isChecked():
                             print('фулл скрин')
@@ -654,33 +686,42 @@ class MyWin(QtWidgets.QMainWindow):
                                     self.ui.label_Info.setText('Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request, site_address))
                                     self.edit_screen(screen_name, results, positions, block_of_ads)
                                     break
+
                         # Режим только рекламного блока
                         elif self.ui.radioButton_OnlyAd.isChecked():
                             for index, r in enumerate(web_results, start=1):
                                 results.append((index, r.text, r.location, r.size))
                             positions, block_of_ads = self.get_positions(results, site_address)
 
-                            # Только спец размещение
-                            # for i in range(0, 4):
                             for i in range(0, len(web_results)):
                                 if site_address in web_results[i].text and (
                                         'реклама' in web_results[i].text or 'Реклама' in web_results[i].text):
                                     print(web_results[i].text)
-                                    if i != 0 or search != 'google':
-                                        driver.execute_script(
-                                            "window.scrollTo(0, {0})".format(web_results[i].location['y'] - padding))
+                                    if i == 0 and search == 'google':
+                                        driver.execute_script("window.scrollTo(0, 0)")
+                                    else:
+                                        driver.execute_script("window.scrollTo(0, {0})".format(web_results[i].location['y'] - padding))
 
                                     if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
                                         os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
 
-                                    screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_window_screen.png'
+                                    screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_only_ad_screen.png'
                                     print(screen_name)
                                     sleep(1)
                                     # скрин
                                     img = ImageGrab.grab().save(screen_name, 'PNG')
                                     img = Image.open(screen_name)
+
+                                    # Отрезает верхнюю часть, где находится адресная строка, оставляет всё что ниже
                                     new_img = img.crop((0, 120, img.width, img.height))
-                                    new_img = new_img.crop((0, 0, img.width, y_padding + web_results[i].size['height']))
+
+                                    # Отрезает всё что ниже искомого объявления, оставляет только поисковую
+                                    # строку и само объявление
+                                    if i == 0 and search == 'google':
+                                        new_img = new_img.crop(
+                                            (0, 0, x_padding + search_size, web_results[i].size['height'] + web_results[i].location['y']))
+                                    else:
+                                        new_img = new_img.crop((0, 0, x_padding + search_size, web_results[i].size['height'] + padding))
                                     new_img.save(screen_name, 'PNG')
                                     break
 
