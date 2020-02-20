@@ -1,5 +1,6 @@
 import os
 import re
+import subprocess
 import sys
 from datetime import datetime
 from functools import partial
@@ -156,6 +157,8 @@ class MyWin(QMainWindow):
         self.ui.pushButton_Cancel.setDisabled(True)
         self.ui.pushButton_Cancel.setVisible(False)
         self.ui.label_Warning.setVisible(False)
+        self.ui.checkBox_Numeration.setDisabled(True)
+        self.ui.checkBox_Numeration.setVisible(False)
 
          # Временный текст
 #         self.ui.textEdit_Requests.setText("""ноутбук""")
@@ -545,6 +548,10 @@ class MyWin(QMainWindow):
             options.add_argument('start-maximized')
             print('браузер открыт')
 
+        if self.ui.checkBox_RotateScreen.isChecked():
+            proc = subprocess.Popen(['powershell.exe', "./co.cmd"])
+            proc.wait()
+
         # Открываем браузер с заданными настройками
         driver = webdriver.Chrome(options=options)  # options=options
 
@@ -564,9 +571,9 @@ class MyWin(QMainWindow):
                 search = 'google'
                 regions = gl_regions
                 padding = 60
-                x_padding = 165
+                x_padding = 150
                 y_padding = 55
-                search_size = 667
+                search_size = 640
 
             # Перебор регионов, по которым ведётся поиск
             for region, code in regions.items():
@@ -612,11 +619,14 @@ class MyWin(QMainWindow):
                             for i in range(0, 4):
                                 if site_address in web_results[i].text and ('реклама' in web_results[i].text or 'Реклама' in web_results[i].text):
                                     print(web_results[i].text)
-                                    if i == 0 and search == 'google':
-                                        driver.execute_script("window.scrollTo(0, 0)")
-                                    else:
-                                        driver.execute_script(
-                                            "window.scrollTo(0, {0})".format(web_results[i].location['y'] - padding))
+
+                                    # Определяем прокручивать к скрину или нет
+                                    if not self.ui.checkBox_WithoutScrollDown.isChecked():
+                                        if i == 0 and search == 'google':
+                                            driver.execute_script("window.scrollTo(0, 0)")
+                                        else:
+                                            driver.execute_script(
+                                                "window.scrollTo(0, {0})".format(web_results[i].location['y'] - padding))
 
                                     if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
                                         os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
@@ -633,30 +643,39 @@ class MyWin(QMainWindow):
 
                                     if not self.ui.checkBox_WithoutFrame.isChecked():
                                         # Рисуем на скрине
-                                        self.ui.label_Info.setText(
-                                            'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request,
-                                                                                                       site_address))
-                                        draw = ImageDraw.Draw(new_img)
+                                        if not self.ui.checkBox_WithoutScrollDown.isChecked():
+                                            self.ui.label_Info.setText(
+                                                'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request,
+                                                                                                           site_address))
+                                            draw = ImageDraw.Draw(new_img)
 
-                                        if search == 'yandex':
-                                            draw.rectangle((x_padding, 0 + y_padding,
-                                                            web_results[i].size['width'] + x_padding,
-                                                            web_results[i].size['height'] + y_padding),
-                                                           outline=(255, 0, 0, 255),
-                                                           width=2)
-                                        elif search == 'google':
-                                            if i == 0:
-                                                draw.rectangle((web_results[i].location['x'] - 2, web_results[i].location['y'] - 2,
-                                                                web_results[i].size['width'] + web_results[i].location['x'],
-                                                                web_results[i].size['height'] + web_results[i].location['y']),
-                                                               outline=(255, 0, 0, 255),
-                                                               width=2)
+                                            if i == 0 and search == 'google':
+                                                    draw.rectangle((web_results[i].location['x'] - 2, web_results[i].location['y'] - 2,
+                                                                    web_results[i].size['width'] + web_results[i].location['x'],
+                                                                    web_results[i].size['height'] + web_results[i].location['y']),
+                                                                   outline=(255, 0, 0, 255),
+                                                                   width=2)
                                             else:
                                                 draw.rectangle((x_padding, 0 + y_padding,
                                                                 web_results[i].size['width'] + x_padding,
                                                                 web_results[i].size['height'] + y_padding),
                                                                outline=(255, 0, 0, 255),
                                                                width=2)
+
+                                        elif self.ui.checkBox_WithoutScrollDown.isChecked():
+                                            self.ui.label_Info.setText(
+                                                'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region,
+                                                                                                           request,
+                                                                                                           site_address))
+                                            draw = ImageDraw.Draw(new_img)
+
+                                            draw.rectangle(
+                                                (web_results[i].location['x'] - 2, web_results[i].location['y'] - 2,
+                                                 web_results[i].size['width'] + web_results[i].location['x'],
+                                                 web_results[i].size['height'] + web_results[i].location['y']),
+                                                outline=(255, 0, 0, 255),
+                                                width=2)
+
                                     new_img.save(screen_name, 'PNG')
                                     break
 
@@ -687,7 +706,7 @@ class MyWin(QMainWindow):
                                     self.edit_screen(screen_name, results, positions, block_of_ads)
                                     break
 
-                        # Режим только рекламного блока
+                        # Режим только одной рекламы
                         elif self.ui.radioButton_OnlyAd.isChecked():
                             for index, r in enumerate(web_results, start=1):
                                 results.append((index, r.text, r.location, r.size))
@@ -736,6 +755,10 @@ class MyWin(QMainWindow):
         # Закрываем браузер
         driver.close()
         print('закрыл драйвер')
+
+        if self.ui.checkBox_RotateScreen.isChecked():
+            proc = subprocess.Popen(['powershell.exe', "./co.cmd"])
+            proc.wait()
 
         # Вот тут желательно перебрать скрины и обработать их
         self.ui.label_Info.setText('Обрабатываю скриншоты')
