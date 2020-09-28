@@ -7,6 +7,7 @@ from functools import partial
 from time import sleep
 
 from PIL import Image, ImageDraw, ImageFont, ImageGrab
+from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QThread
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QCompleter, QTableWidgetItem, QDesktopWidget, QMainWindow, QWidget
@@ -14,7 +15,8 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from selenium import webdriver
 
-from interface import *
+# from interface import *
+from interface import Ui_MainWindow
 
 
 class SearchThread(QThread):
@@ -123,6 +125,8 @@ class MyWin(QMainWindow):
 Без знаков после домена верхнего уровня.""")
         self.ui.radioButton_Windowscreen.setToolTip("""Скриншоты размером с экран с панелью пуск""")
         self.ui.radioButton_Fullscreen.setToolTip("""Скриншоты без панели пуск, но с полной страницей выдачи""")
+        self.ui.radioButton_OnlyAd.setToolTip("""Скриншоты только рекламы спец искомого сайта и ничего лишнего""")
+        self.ui.radioButton_SpecialAndGarant.setToolTip("""Скриншоты спец и гарант без определенного сайта""")
         self.ui.checkBox_AddTimeDateToScreen.setToolTip("""Имеет смысл только для fullscreen режима""")
         self.ui.tableWidget.setToolTip("""Таблица для заполнения регионами.
 Если нет нужного города, то его можно добавить вручную
@@ -157,8 +161,8 @@ class MyWin(QMainWindow):
         self.ui.pushButton_Cancel.setDisabled(True)
         self.ui.pushButton_Cancel.setVisible(False)
         self.ui.label_Warning.setVisible(False)
-        self.ui.checkBox_Numeration.setDisabled(True)
-        self.ui.checkBox_Numeration.setVisible(False)
+        # self.ui.checkBox_Numeration.setDisabled(True)
+        # self.ui.checkBox_Numeration.setVisible(False)
 
          # Временный текст
 #         self.ui.textEdit_Requests.setText("""ноутбук""")
@@ -234,8 +238,31 @@ class MyWin(QMainWindow):
 
         return count, index
 
+    def get_block_of_ads(self, results):
+        special = []
+        seo = []
+        garant = []
+
+        temp = False
+
+        # Распределяем результаты по массивам
+        for result in results:
+            if 'Яндекс.Маркет' in result[1] and 'Реклама' in result[1]:
+                continue
+            if 'реклама' in result[1] or 'Реклама' in result[1]:
+                if temp:
+                    garant.append(result)
+                else:
+                    special.append(result)
+            else:
+                temp = True
+                seo.append(result)
+
+        block_of_ads = [special, seo, garant]
+        return block_of_ads
+
     # Функция для определения позиций в спец/seo/гарант
-    def get_positions(self, results, site_address):
+    def get_positions(self, results, site_address=None):
         special = []
         seo = []
         garant = []
@@ -289,18 +316,19 @@ class MyWin(QMainWindow):
                     draw.rectangle((element[2]['x'], element[2]['y'], element[2]['x'] + element[3]['width'],
                                     element[2]['y'] + element[3]['height']), outline=(255, 0, 0, 255), width=3,)
 
-        # Рисуем на скрине нумерацию
-        for result in results:
-            draw.text((result[2]['x'] - 100, result[2]['y']), str(result[0]), fill=(0, 0, 0), font=font)
+        if self.ui.checkBox_Numeration.isChecked():
+            # Рисуем на скрине нумерацию
+            for result in results:
+                draw.text((result[2]['x'] - 100, result[2]['y']), str(result[0]), fill=(0, 0, 0), font=font)
 
-        for index, spcl in enumerate(block_of_ads[0], start=1):
-            draw.text((spcl[2]['x'] - 50, spcl[2]['y']), str(index), fill=(255, 0, 0), font=font)
+            for index, spcl in enumerate(block_of_ads[0], start=1):
+                draw.text((spcl[2]['x'] - 50, spcl[2]['y']), str(index), fill=(255, 0, 0), font=font)
 
-        for index, s in enumerate(block_of_ads[1], start=1):
-            draw.text((s[2]['x'] - 50, s[2]['y']), str(index), fill=(0, 128, 0), font=font)
+            for index, s in enumerate(block_of_ads[1], start=1):
+                draw.text((s[2]['x'] - 50, s[2]['y']), str(index), fill=(0, 128, 0), font=font)
 
-        for index, g in enumerate(block_of_ads[2], start=1):
-            draw.text((g[2]['x'] - 50, g[2]['y']), str(index), fill=(0, 0, 255), font=font)
+            for index, g in enumerate(block_of_ads[2], start=1):
+                draw.text((g[2]['x'] - 50, g[2]['y']), str(index), fill=(0, 0, 255), font=font)
 
         # Конец рисования
         del draw
@@ -509,7 +537,7 @@ class MyWin(QMainWindow):
             self.ui.label_Info.setText('Ошибка! Вы не указали запросы!')
             self.thread_instance.stop()
             return ''
-        elif len(sites_addresses) == 0:
+        elif len(sites_addresses) == 0 and not self.ui.radioButton_SpecialAndGarant.isChecked():
             self.ui.label_Info.setText('Ошибка! Вы не указали сайты!')
             self.thread_instance.stop()
             return ''
@@ -524,7 +552,13 @@ class MyWin(QMainWindow):
         print(self.save_path)
 
         # Путь для создания папки со скриншотами
-        main_folder_path = '{0}\\AH_{1}_{2}'.format(self.save_path, sites_addresses[0], datetime.now().strftime('%H_%M_%S'))
+        folder_name=''
+        if len(sites_addresses) == 0:
+            folder_name = 'adhunter'
+        else:
+            folder_name = sites_addresses[0]
+
+        main_folder_path = '{0}\\AH_{1}_{2}'.format(self.save_path, folder_name, datetime.now().strftime('%H_%M_%S'))
         self.ui.label_SavePath.setText('Путь: {0}'.format(main_folder_path))
         if not os.path.exists(main_folder_path):
             os.mkdir(main_folder_path)
@@ -544,17 +578,20 @@ class MyWin(QMainWindow):
             options.add_argument('window-size=1920x3800')
             options.add_argument('headless')
             print('браузер скрыт')
-        if self.ui.radioButton_OnlyAd.isChecked():
+        elif self.ui.radioButton_OnlyAd.isChecked():
+            options.add_argument('start-maximized')
+            print('браузер открыт')
+        elif self.ui.radioButton_SpecialAndGarant.isChecked():
             options.add_argument('start-maximized')
             print('браузер открыт')
 
         if self.ui.checkBox_RotateScreen.isChecked():
             proc = subprocess.Popen(['powershell.exe', "./co.cmd"])
             proc.wait()
-
+        print('???1')
         # Открываем браузер с заданными настройками
         driver = webdriver.Chrome(options=options)  # options=options
-
+        print('???2')
         # Перебор всех поисковых систем
         for url in self.searchers:
             regions = {}
@@ -563,17 +600,17 @@ class MyWin(QMainWindow):
             if url == 'https://yandex.ru/search/?text={0}&lr={1}':
                 search = 'yandex'
                 regions = yd_regions
-                padding = 100
-                x_padding = 116
-                y_padding = 95
+                padding = 100 #При скролле к объявлению
+                x_padding = 116 #При рисовании прямоугольника
+                y_padding = 95 #При рисовании прямоугольника
                 search_size = 641
             elif url == 'https://www.google.com/search?q={0}&uule={1}':
                 search = 'google'
                 regions = gl_regions
-                padding = 60
-                x_padding = 150
-                y_padding = 55
-                search_size = 640
+                padding = 60 #При скролле к объявлению
+                x_padding = 180 #150 #При рисовании прямоугольника
+                y_padding = 55 #При рисовании прямоугольника
+                search_size = 645
 
             # Перебор регионов, по которым ведётся поиск
             for region, code in regions.items():
@@ -589,168 +626,309 @@ class MyWin(QMainWindow):
                     # Находим все элементы выдачи на странице
                     if search == 'yandex':
                         web_results = driver.find_elements_by_xpath('//li[@class="serp-item"]')
+                        # Убираем рекламу Яндекс.Маркета
+                        for result in web_results:
+                            if 'Яндекс.Маркет' in result.text and 'Реклама' in result.text:
+                                web_results.remove(result)
+                                break
                     elif search == 'google':
-                        top_results = driver.find_elements_by_xpath('//*[@id="tads"]/ol/li')
+                        # Здесь сделано таким образом, потмому что в поиске гугла у рекламных элементов разная вложенность.
+                        # Пока что встречал два разных варианта.
+                        top_results = driver.find_elements_by_xpath('//*[@id="tads"]/div/ol/li')
+                        if not len(top_results) == 0:
+                            garant_results = driver.find_elements_by_xpath('//*[@id="tadsb"]/div/ol/li')
+                        elif len(top_results) == 0:
+                            top_results = driver.find_elements_by_xpath('//*[@id="tads"]/div')
+                            garant_results = driver.find_elements_by_xpath('//*[@id="tadsb"]/div')
                         seo_results = driver.find_elements_by_xpath('//div[@class="rc"]')
-                        garant_results = driver.find_elements_by_xpath('//*[@id="tadsb"]/ol/li')
+                        print('блоки')
+                        print(top_results)
+                        print(garant_results)
                         web_results = top_results + seo_results + garant_results
 
+                    # Новый режим, только спец и гарант без конкретного сайта
+                    if self.ui.radioButton_SpecialAndGarant.isChecked():
+                        results = []
+                        self.ui.label_Info.setText(
+                            'Выполняю запрос: {0} - {1}'.format(region, request))
+                        print('Выполняю запрос: {0} - {1}'.format(region, request))
+
+                        # Собираем всю инфу со страницы
+                        for index, result in enumerate(web_results, start=1):
+                            if 'Яндекс.Маркет' in result.text and 'Реклама' in result.text:
+                                continue
+                            results.append((index, result.text, result.location, result.size))
+
+                        block_of_ads = self.get_block_of_ads(results)
+                        print(block_of_ads[0])
+                        print(block_of_ads[2])
+                        # Проверяем наличие spec
+                        if len(block_of_ads[0]) != 0:
+
+                            if not os.path.exists(f'{main_folder_path}\\{search}\\{region}'):
+                                os.makedirs(f'{main_folder_path}\\{search}\\{region}')
+
+                            screen_name = f'{main_folder_path}\\{search}\\{region}\\{search}_{region}_{request}_special_screen.png'
+                            print(screen_name)
+
+                            # driver.save_screenshot(screen_name)
+
+                            sleep(1)
+                            # скрин
+                            img = ImageGrab.grab().save(screen_name, 'PNG')
+                            img = Image.open(screen_name)
+
+                            new_img = img.crop((0, 120, img.width, img.height))
+                            print('tut')
+                            # Отрезает всё что ниже искомого объявления, оставляет только поисковую
+                            # строку и само объявление
+                            # if search == 'google':
+                            #     print('или тут')
+                            #     new_img = new_img.crop(
+                            #         (0, 0, x_padding + search_size,
+                            #          block_of_ads[0][-1][3]['height'] + block_of_ads[0][-1][2]['y']))
+                            #     print('или тут')
+                            # else:
+                            new_img = new_img.crop(
+                                (0, 0, x_padding + search_size + 50, block_of_ads[0][-1][3]['height'] + block_of_ads[0][-1][2]['y']))
+                            new_img.save(screen_name, 'PNG')
+                            if search == 'google':
+                                print('сделал скрин для гугла')
+
+                        # Проверяем на garant
+                        if len(block_of_ads[2]) != 0:
+
+                            if not os.path.exists(f'{main_folder_path}\\{search}\\{region}'):
+                                os.makedirs(f'{main_folder_path}\\{search}\\{region}')
+
+                            screen_name = f'{main_folder_path}\\{search}\\{region}\\{search}_{region}_{request}_garant_screen.png'
+                            print(screen_name)
+
+                            # driver.save_screenshot(screen_name)
+                            driver.execute_script(
+                                "window.scrollTo(0, {0})".format(block_of_ads[2][0][2]['y'] - padding))
+                            sleep(1)
+                            # скрин
+
+                            img = ImageGrab.grab().save(screen_name, 'PNG')
+                            img = Image.open(screen_name)
+                            #
+                            new_img = img.crop((0, 120, img.width, img.height-95))
+                            print('tut')
+                            # Отрезает всё что ниже искомого объявления, оставляет только поисковую
+                            # строку и само объявление
+                            # if search == 'google':
+                            #     print('или тут')
+                            #     # new_img = new_img.crop(
+                            #     #     (0, 0, x_padding + search_size,
+                            #     #      block_of_ads[2][-1][3]['height'] + block_of_ads[2][-1][2]['y']))
+                            #     new_img = new_img.crop(
+                            #         (0, 0, x_padding + search_size, new_img.size[1]))
+                            #     print('или тут')
+                            # else:
+                            new_img = new_img.crop(
+                                    (0, 0, x_padding + search_size + 50, new_img.size[1]))
+                            new_img.save(screen_name, 'PNG')
+
+                            # для яндекса готово. осталось затестить для гугла
+                    else:
                     # Находим все адреса сайтов в выдаче
                     # sites_on_page = driver.find_elements_by_xpath('//li[@class="serp-item"]/div/div/div/a/b')
-                    for site_address in sites_addresses:
-                        self.ui.label_Info.setText('Выполняю запрос: {0} - {1} - {2}'.format(region, request, site_address))
-                        results = []
+                        for site_address in sites_addresses:
+                            self.ui.label_Info.setText('Выполняю запрос: {0} - {1} - {2}'.format(region, request, site_address))
+                            results = []
 
-                        # Лист для позиций искомого сайта в выдаче
-                        # Первое число позиция по всем запросам, второе относительно блока в котором находится
-                        positions = [(0, 0), (0, 0), (0, 0)]
-                        screen_name = 'Результатов нет'
+                            # Лист для позиций искомого сайта в выдаче
+                            # Первое число позиция по всем запросам, второе относительно блока в котором находится
+                            positions = [(0, 0), (0, 0), (0, 0)]
+                            screen_name = 'Результатов нет'
 
-                        # TODO в каждом результате много данных и в них программа ищет наличие сайта
-                        # TODO для оптимизации следует собирать со страницы только адреса, сравнивать их с нашим сайтом
-                        # Перебор результатов выдачи поиска
-                        # Режим оконного скрина
-                        if self.ui.radioButton_Windowscreen.isChecked():
-                            for index, r in enumerate(web_results, start=1):
-                                results.append((index, r.text, r.location, r.size))
-                            positions, block_of_ads = self.get_positions(results, site_address)
+                            # TODO в каждом результате много данных и в них программа ищет наличие сайта
+                            # TODO для оптимизации следует собирать со страницы только адреса, сравнивать их с нашим сайтом
+                            # Перебор результатов выдачи поиска
+                            # Режим оконного скрина
+                            if self.ui.radioButton_Windowscreen.isChecked():
+                                for index, r in enumerate(web_results, start=1):
+                                    if 'Яндекс.Маркет' in r.text and 'Реклама' in r.text:
+                                        continue
+                                    results.append((index, r.text, r.location, r.size))
+                                positions, block_of_ads = self.get_positions(results, site_address)
 
-                            # Только спец размещение
-                            for i in range(0, 4):
-                                if site_address in web_results[i].text and ('реклама' in web_results[i].text or 'Реклама' in web_results[i].text):
-                                    print(web_results[i].text)
+                                # Только спец размещение
+                                for i in range(0, 4):
+                                    if site_address in web_results[i].text and ('реклама' in web_results[i].text or 'Реклама' in web_results[i].text):
+                                        print(web_results[i].text)
 
-                                    # Определяем прокручивать к скрину или нет
-                                    if not self.ui.checkBox_WithoutScrollDown.isChecked():
+                                        # Определяем прокручивать к скрину или нет
+                                        if not self.ui.checkBox_WithoutScrollDown.isChecked():
+                                            if i == 0 and search == 'google':
+                                                driver.execute_script("window.scrollTo(0, 0)")
+                                            else:
+                                                driver.execute_script(
+                                                    "window.scrollTo(0, {0})".format(web_results[i].location['y'] - padding))
+
+                                        if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
+                                            os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
+
+                                        screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_window_screen.png'
+                                        print(screen_name)
+                                        sleep(1)
+                                        #скрин
+                                        img = ImageGrab.grab().save(screen_name, 'PNG')
+                                        img = Image.open(screen_name)
+
+                                        # Отрезает верхнюю часть, где находится адресная строка, оставляет всё что ниже
+                                        new_img = img.crop((0, 120, img.width, img.height))
+
+                                        if not self.ui.checkBox_WithoutFrame.isChecked():
+                                            # Рисуем рамку
+                                            # Скроллит к объявлению
+                                            if not self.ui.checkBox_WithoutScrollDown.isChecked():
+                                                self.ui.label_Info.setText(
+                                                    'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request,
+                                                                                                               site_address))
+                                                draw = ImageDraw.Draw(new_img)
+
+                                                if i == 0 and search == 'google':
+                                                        draw.rectangle((web_results[i].location['x'] - 2, web_results[i].location['y'] - 2,
+                                                                        web_results[i].size['width'] + web_results[i].location['x'],
+                                                                        web_results[i].size['height'] + web_results[i].location['y']),
+                                                                       outline=(255, 0, 0, 255),
+                                                                       width=2)
+                                                else:
+                                                    draw.rectangle((x_padding, 0 + y_padding,
+                                                                    web_results[i].size['width'] + x_padding,
+                                                                    web_results[i].size['height'] + y_padding),
+                                                                   outline=(255, 0, 0, 255),
+                                                                   width=2)
+
+                                            # Без скролла к объявлению
+                                            elif self.ui.checkBox_WithoutScrollDown.isChecked():
+                                                self.ui.label_Info.setText(
+                                                    'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region,
+                                                                                                               request,
+                                                                                                               site_address))
+                                                draw = ImageDraw.Draw(new_img)
+
+                                                draw.rectangle(
+                                                    (web_results[i].location['x'] - 2, web_results[i].location['y'] - 2,
+                                                     web_results[i].size['width'] + web_results[i].location['x'],
+                                                     web_results[i].size['height'] + web_results[i].location['y']),
+                                                    outline=(255, 0, 0, 255),
+                                                    width=2)
+
+                                        # Рисуем нумерацию
+                                        font = ImageFont.truetype('Aegean.ttf', 25)
+                                        if self.ui.checkBox_WithoutScrollDown.isChecked() and self.ui.checkBox_Numeration.isChecked():
+                                            for result in results:
+                                                draw.text((result[2]['x'] - 100, result[2]['y']), str(result[0]),
+                                                          fill=(0, 0, 0), font=font)
+
+                                            for index, spcl in enumerate(block_of_ads[0], start=1):
+                                                draw.text((spcl[2]['x'] - 50, spcl[2]['y']), str(index),
+                                                          fill=(255, 0, 0), font=font)
+
+                                            for index, s in enumerate(block_of_ads[1], start=1):
+                                                draw.text((s[2]['x'] - 50, s[2]['y']), str(index), fill=(0, 128, 0),
+                                                          font=font)
+
+                                            for index, g in enumerate(block_of_ads[2], start=1):
+                                                draw.text((g[2]['x'] - 50, g[2]['y']), str(index), fill=(0, 0, 255),
+                                                          font=font)
+
+                                        # Тут идет смещение нумерации. Всю просто нумерацию выводить неправильно
+                                        #
+                                        elif not self.ui.checkBox_WithoutScrollDown.isChecked() and self.ui.checkBox_Numeration.isChecked():
+                                            results = results[i:]
+
+                                            for result in results:
+                                                if result[0] != 1 and search != 'google':
+                                                    y = result[2]['y'] - results[0][2]['y'] + y_padding
+                                                else:
+                                                    y = result[2]['y']
+
+                                                draw.text((result[2]['x'] - 100, y), str(result[0]),
+                                                          fill=(0, 0, 0), font=font)
+
+                                        new_img.save(screen_name, 'PNG')
+                                        break
+
+                            # Режим полного скрина
+                            elif self.ui.radioButton_Fullscreen.isChecked():
+                                print('фулл скрин')
+                                for result in web_results:
+                                    if site_address in result.text:
+                                        print(result.text)
+
+                                        # Собираем всю инфу со страницы
+                                        for index, result in enumerate(web_results, start=1):
+                                            if 'Яндекс.Маркет' in result.text and 'Реклама' in result.text:
+                                                continue
+                                            results.append((index, result.text, result.location, result.size))
+
+                                        if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
+                                            os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
+
+                                        # TODO тут с именем скриншота. Как его потом вытаскивать из функций
+                                        screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_full_screen.png'
+                                        print(screen_name)
+
+                                        driver.save_screenshot(screen_name)
+
+                                        positions, block_of_ads = self.get_positions(results, site_address)
+
+                                        # Рисуем на скрине
+                                        self.ui.label_Info.setText('Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request, site_address))
+                                        self.edit_screen(screen_name, results, positions, block_of_ads)
+                                        break
+
+                            # Режим только одной рекламы
+                            elif self.ui.radioButton_OnlyAd.isChecked():
+                                for index, r in enumerate(web_results, start=1):
+                                    if 'Яндекс.Маркет' in r.text and 'Реклама' in r.text:
+                                        continue
+                                    results.append((index, r.text, r.location, r.size))
+                                positions, block_of_ads = self.get_positions(results, site_address)
+
+                                for i in range(0, len(web_results)):
+                                    if site_address in web_results[i].text and (
+                                            'реклама' in web_results[i].text or 'Реклама' in web_results[i].text):
+                                        print(web_results[i].text)
                                         if i == 0 and search == 'google':
                                             driver.execute_script("window.scrollTo(0, 0)")
                                         else:
-                                            driver.execute_script(
-                                                "window.scrollTo(0, {0})".format(web_results[i].location['y'] - padding))
+                                            driver.execute_script("window.scrollTo(0, {0})".format(web_results[i].location['y'] - padding))
 
-                                    if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
-                                        os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
+                                        if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
+                                            os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
 
-                                    screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_window_screen.png'
-                                    print(screen_name)
-                                    sleep(1)
-                                    #скрин
-                                    img = ImageGrab.grab().save(screen_name, 'PNG')
-                                    img = Image.open(screen_name)
+                                        screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_only_ad_screen.png'
+                                        print(screen_name)
+                                        sleep(1)
+                                        # скрин
+                                        img = ImageGrab.grab().save(screen_name, 'PNG')
+                                        img = Image.open(screen_name)
 
-                                    # Отрезает верхнюю часть, где находится адресная строка, оставляет всё что ниже
-                                    new_img = img.crop((0, 120, img.width, img.height))
+                                        # Отрезает верхнюю часть, где находится адресная строка, оставляет всё что ниже
+                                        new_img = img.crop((0, 120, img.width, img.height))
 
-                                    if not self.ui.checkBox_WithoutFrame.isChecked():
-                                        # Рисуем на скрине
-                                        if not self.ui.checkBox_WithoutScrollDown.isChecked():
-                                            self.ui.label_Info.setText(
-                                                'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request,
-                                                                                                           site_address))
-                                            draw = ImageDraw.Draw(new_img)
+                                        # Отрезает всё что ниже искомого объявления, оставляет только поисковую
+                                        # строку и само объявление
+                                        if i == 0 and search == 'google':
+                                            new_img = new_img.crop(
+                                                (0, 0, x_padding + search_size, web_results[i].size['height'] + web_results[i].location['y']))
+                                        else:
+                                            new_img = new_img.crop((0, 0, x_padding + search_size, web_results[i].size['height'] + padding))
+                                        new_img.save(screen_name, 'PNG')
+                                        break
 
-                                            if i == 0 and search == 'google':
-                                                    draw.rectangle((web_results[i].location['x'] - 2, web_results[i].location['y'] - 2,
-                                                                    web_results[i].size['width'] + web_results[i].location['x'],
-                                                                    web_results[i].size['height'] + web_results[i].location['y']),
-                                                                   outline=(255, 0, 0, 255),
-                                                                   width=2)
-                                            else:
-                                                draw.rectangle((x_padding, 0 + y_padding,
-                                                                web_results[i].size['width'] + x_padding,
-                                                                web_results[i].size['height'] + y_padding),
-                                                               outline=(255, 0, 0, 255),
-                                                               width=2)
+                            # Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
+                            spec = positions[0]
+                            seo = positions[1]
+                            garant = positions[2]
 
-                                        elif self.ui.checkBox_WithoutScrollDown.isChecked():
-                                            self.ui.label_Info.setText(
-                                                'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region,
-                                                                                                           request,
-                                                                                                           site_address))
-                                            draw = ImageDraw.Draw(new_img)
-
-                                            draw.rectangle(
-                                                (web_results[i].location['x'] - 2, web_results[i].location['y'] - 2,
-                                                 web_results[i].size['width'] + web_results[i].location['x'],
-                                                 web_results[i].size['height'] + web_results[i].location['y']),
-                                                outline=(255, 0, 0, 255),
-                                                width=2)
-
-                                    new_img.save(screen_name, 'PNG')
-                                    break
-
-                        # Режим полного скрина
-                        elif self.ui.radioButton_Fullscreen.isChecked():
-                            print('фулл скрин')
-                            for result in web_results:
-                                if site_address in result.text:
-                                    print(result.text)
-
-                                    # Собираем всю инфу со страницы
-                                    for index, result in enumerate(web_results, start=1):
-                                        results.append((index, result.text, result.location, result.size))
-
-                                    if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
-                                        os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
-
-                                    # TODO тут с именем скриншота. Как его потом вытаскивать из функций
-                                    screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_full_screen.png'
-                                    print(screen_name)
-
-                                    driver.save_screenshot(screen_name)
-
-                                    positions, block_of_ads = self.get_positions(results, site_address)
-
-                                    # Рисуем на скрине
-                                    self.ui.label_Info.setText('Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region, request, site_address))
-                                    self.edit_screen(screen_name, results, positions, block_of_ads)
-                                    break
-
-                        # Режим только одной рекламы
-                        elif self.ui.radioButton_OnlyAd.isChecked():
-                            for index, r in enumerate(web_results, start=1):
-                                results.append((index, r.text, r.location, r.size))
-                            positions, block_of_ads = self.get_positions(results, site_address)
-
-                            for i in range(0, len(web_results)):
-                                if site_address in web_results[i].text and (
-                                        'реклама' in web_results[i].text or 'Реклама' in web_results[i].text):
-                                    print(web_results[i].text)
-                                    if i == 0 and search == 'google':
-                                        driver.execute_script("window.scrollTo(0, 0)")
-                                    else:
-                                        driver.execute_script("window.scrollTo(0, {0})".format(web_results[i].location['y'] - padding))
-
-                                    if not os.path.exists(f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
-                                        os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
-
-                                    screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_only_ad_screen.png'
-                                    print(screen_name)
-                                    sleep(1)
-                                    # скрин
-                                    img = ImageGrab.grab().save(screen_name, 'PNG')
-                                    img = Image.open(screen_name)
-
-                                    # Отрезает верхнюю часть, где находится адресная строка, оставляет всё что ниже
-                                    new_img = img.crop((0, 120, img.width, img.height))
-
-                                    # Отрезает всё что ниже искомого объявления, оставляет только поисковую
-                                    # строку и само объявление
-                                    if i == 0 and search == 'google':
-                                        new_img = new_img.crop(
-                                            (0, 0, x_padding + search_size, web_results[i].size['height'] + web_results[i].location['y']))
-                                    else:
-                                        new_img = new_img.crop((0, 0, x_padding + search_size, web_results[i].size['height'] + padding))
-                                    new_img.save(screen_name, 'PNG')
-                                    break
-
-                        # Разбиваем массив с позициями на несколько массивов, так проще потом обрабатывать
-                        spec = positions[0]
-                        seo = positions[1]
-                        garant = positions[2]
-
-                        # Добавляем данные в один большой, чтобы потом записать всё в эксель файл
-                        statistics.append((region, request, site_address, spec, seo, garant, screen_name, search))
+                            # Добавляем данные в один большой, чтобы потом записать всё в эксель файл
+                            statistics.append((region, request, site_address, spec, seo, garant, screen_name, search))
 
         # Закрываем браузер
         driver.close()
@@ -765,9 +943,10 @@ class MyWin(QMainWindow):
         # "тут"
 
         # Записываем статистику в файл
-        self.ui.label_Info.setText('Собираю статистику в файл')
-        self.edit_file_stat(statistics, main_folder_path)
-        print('записал стату в файл')
+        if not self.ui.radioButton_SpecialAndGarant.isChecked():
+            self.ui.label_Info.setText('Собираю статистику в файл')
+            self.edit_file_stat(statistics, main_folder_path)
+            print('записал стату в файл')
 
         # Закрывает процесс chromedriver
         os.system("TASKKILL /F /IM chromedriver.exe")
