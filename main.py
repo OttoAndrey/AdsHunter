@@ -151,6 +151,11 @@ class MyWin(QMainWindow):
         self.ui.checkBox_Google.clicked.connect(self.settings_google)
         self.ui.checkBox_Yandex.clicked.connect(self.settings_yandex)
 
+        self.ui.radioButton_Windowscreen.toggled.connect(self.disable_tools)
+        self.ui.radioButton_Fullscreen.toggled.connect(self.disable_tools)
+        self.ui.radioButton_OnlyAd.toggled.connect(self.disable_tools)
+        self.ui.radioButton_SpecialAndGarant.toggled.connect(self.disable_tools)
+
         # Значения элементов интерфейса по умолчанию
         self.ui.label_Info.setText('Нажмите "Начать" для выполнения программы')
         self.ui.tableWidget_Google.setDisabled(True)
@@ -202,6 +207,33 @@ class MyWin(QMainWindow):
             self.searchers.remove('https://www.google.com/search?q={0}&uule={1}')
             self.ui.tableWidget_Google.setDisabled(True)
         print(self.searchers)
+
+    def disable_tools(self):
+        if self.ui.radioButton_Windowscreen.isChecked():
+            self.ui.checkBox_AddTimeDateToScreen.setDisabled(True)
+            self.ui.checkBox_WithoutFrame.setDisabled(False)
+            self.ui.checkBox_WithoutScrollDown.setDisabled(False)
+            self.ui.checkBox_Numeration.setDisabled(False)
+            self.ui.textEdit_SitesAddresses.setDisabled(False)
+        elif self.ui.radioButton_Fullscreen.isChecked():
+            self.ui.checkBox_AddTimeDateToScreen.setDisabled(False)
+            self.ui.checkBox_WithoutFrame.setDisabled(False)
+            self.ui.checkBox_WithoutScrollDown.setDisabled(True)
+            self.ui.checkBox_Numeration.setDisabled(False)
+            self.ui.textEdit_SitesAddresses.setDisabled(False)
+        elif self.ui.radioButton_OnlyAd.isChecked():
+            self.ui.checkBox_AddTimeDateToScreen.setDisabled(True)
+            self.ui.checkBox_WithoutFrame.setDisabled(True)
+            self.ui.checkBox_WithoutScrollDown.setDisabled(True)
+            self.ui.checkBox_Numeration.setDisabled(True)
+            self.ui.textEdit_SitesAddresses.setDisabled(False)
+        elif self.ui.radioButton_SpecialAndGarant.isChecked():
+            self.ui.checkBox_AddTimeDateToScreen.setDisabled(True)
+            self.ui.checkBox_WithoutFrame.setDisabled(True)
+            self.ui.checkBox_WithoutScrollDown.setDisabled(True)
+            self.ui.checkBox_Numeration.setDisabled(True)
+            self.ui.textEdit_SitesAddresses.setDisabled(True)
+
 
     # Функция разбивает текст пользователя в поле Запросы на элементы массива и возвращает массив
     def get_requests(self,text):
