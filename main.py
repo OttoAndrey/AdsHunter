@@ -1,5 +1,3 @@
-import os
-import re
 import subprocess
 import sys
 from datetime import datetime
@@ -11,11 +9,10 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QThread
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QCompleter, QTableWidgetItem, QDesktopWidget, QMainWindow, QWidget
-from openpyxl import load_workbook
-from openpyxl.styles import PatternFill
 from selenium import webdriver
 
 from interface import Ui_MainWindow
+from other_fucntions import *
 from settings import *
 
 
@@ -66,11 +63,11 @@ class MyWin(QMainWindow):
         self.ui.setupUi(self)
 
         # Иконка приложения в левом верхнем углу.
-        self.setWindowIcon(QIcon('pic/logo.png'))
+        # self.setWindowIcon(QIcon('pic/logo.png'))
 
         # Логотип в правом нижнем углу.
         self.lbl = QtWidgets.QLabel(self)
-        self.pix = QtGui.QPixmap('pic/logo.png')
+        # self.pix = QtGui.QPixmap('pic/logo.png')
         self.lbl.setPixmap(self.pix)
         self.lbl.resize(500, 500)
         self.lbl.move(1280, 600)
@@ -253,99 +250,6 @@ class MyWin(QMainWindow):
             self.ui.checkBox_Numeration.setDisabled(True)
             self.ui.textEdit_SitesAddresses.setDisabled(True)
 
-    # Функция разбивает текст пользователя в textEdit "Запросы" в массив.
-    # TODO Можно вынести в отдельный файл или за пределы класса.
-    def get_requests(self, text):
-        temp = text.split('\n')
-        user_requests = tuple(request for request in temp if request != '')
-        return user_requests
-
-    # Функция разбивает текст пользователя в textEdit "Сайты" в массив.
-    # TODO Можно вынести в отдельный файл или за пределы класса.
-    def get_sites_addresses(self, text):
-        clear_sites_addresses = []
-        pattern = r'\w+-*\w+\.\w+-*\w+\.*\w*'
-        sites_addresses = text.split('\n')
-        print(sites_addresses)
-
-        for site in sites_addresses:
-            match = re.search(pattern, site)
-            if match:
-                match = match[0]
-                if match[0:4] == 'www.':
-                    match = match[4:]
-                clear_sites_addresses.append(match)
-        print(clear_sites_addresses)
-        clear_sites_addresses = tuple(site for site in clear_sites_addresses)
-        return clear_sites_addresses
-
-    # Функция разбивает все результаты поиска на три массива спец/сео/гарант.
-    # Возвращает массив массивов.
-    # TODO Можно вынести в отдельный файл или за пределы класса.
-    def get_block_of_ads(self, results):
-        special = []
-        seo = []
-        garant = []
-
-        temp = False
-
-        # Распределяем результаты по массивам
-        for result in results:
-            if 'Яндекс.Маркет' in result[1] and 'Реклама' in result[1]:
-                continue
-            if 'реклама' in result[1] or 'Реклама' in result[1]:
-                if temp:
-                    garant.append(result)
-                else:
-                    special.append(result)
-            else:
-                temp = True
-                seo.append(result)
-
-        block_of_ads = [special, seo, garant]
-        return block_of_ads
-
-    # Функция вычисляет позицию сайта относительно блоков спец/сео/гарант
-    # TODO Можно вынести в отдельный файл или за пределы класса.
-    def get_site_position(self, block, site_address):
-        count = 0
-        for index, b in enumerate(block, start=1):
-            if site_address in b[1]:
-                count = b[0]
-                break
-        if count == 0:
-            index = 0
-
-        return count, index
-
-    # Функция для определения позиций в спец/seo/гарант.
-    # TODO Можно вынести в отдельный файл или за пределы класса.
-    def get_positions(self, results, site_address=None):
-        special = []
-        seo = []
-        garant = []
-
-        temp = False
-
-        # Распределяем результаты по массивам
-        for result in results:
-            if 'реклама' in result[1] or 'Реклама' in result[1]:
-                if temp:
-                    garant.append(result)
-                else:
-                    special.append(result)
-            else:
-                temp = True
-                seo.append(result)
-
-        special_position = self.get_site_position(special, site_address)
-        seo_position = self.get_site_position(seo, site_address)
-        garant_position = self.get_site_position(garant, site_address)
-
-        positions = [special_position, seo_position, garant_position]
-        block_of_ads = [special, seo, garant]
-        return positions, block_of_ads
-
     # Функция возвращает скрин с нумерацией и рамками для режима полного скрина.
     def edit_screen(self, screen_name, results, positions, block_of_ads):
         # Начинаем работу с изображением
@@ -423,41 +327,14 @@ class MyWin(QMainWindow):
         print(lr)
         self.ui.tableWidget.setItem(row, column, QTableWidgetItem(str(lr)))
 
-    # Считывает из файла регионы гугла.
-    # Возвращает словарь {название региона: код_для_урла}
-    # TODO Функцию можно убрать в отдельный файл или вынести за пределы класса.
-    def get_gl_regions(self):
-        wb = load_workbook('excel/google_regions.xlsx')
-        sheet = wb.active
-        regions_name = sheet['A']
-        uule_code = sheet['B']
-
-        regions = {a.value: b.value for a, b in zip(regions_name, uule_code)}
-
-        wb.close()
-
-        return regions
-
-    # Функция возвращает список с городами для пользовательского поиска.
-    # Считывает регионы для яндекса из файла.
-    # Возвращает кортеж.
-    # TODO Функцию можно убрать в отдельный файл или вынести за пределы класса.
-    def get_yd_regions(self):
-        wb = load_workbook('excel/regions.xlsx')
-        sheet = wb.active
-        column_regions = sheet['B']
-        regions = tuple(cell.value for cell in column_regions)
-        wb.close()
-        return regions
-
     # Функция возвращает словарь регионов из таблицы для Яндекса.
     def get_regions_from_table(self):
         regions = {}
         for row in range(0, 5):
             try:
                 # Пропускаем, если пользователь в таблице оставил пустые строки или города с None
-                if self.ui.tableWidget.cellWidget(row, 0).text() == '' or self.ui.tableWidget.item(row,
-                                                                                                   1).text() == 'None':
+                if self.ui.tableWidget.cellWidget(row, 0).text() == '' or \
+                        self.ui.tableWidget.item(row, 1).text() == 'None':
                     continue
                 city = self.ui.tableWidget.cellWidget(row, 0).text()
                 lr = self.ui.tableWidget.item(row, 1).text()
@@ -486,97 +363,6 @@ class MyWin(QMainWindow):
             regions['current'] = ''
 
         return regions
-
-    # Функция для создания файла экселя и записи в него статистики.
-    # TODO Функцию можно убрать в отдельный файл или вынести за пределы класса.
-    def edit_file_stat(self, statistics, main_folder_path):
-        # Разбиваем статистику на два массива яндекса и гугла.
-        yd_statistics = []
-        gl_statistics = []
-        for stat in statistics:
-            if stat[7] == 'yandex':
-                yd_statistics.append(stat)
-            elif stat[7] == 'google':
-                gl_statistics.append(stat)
-
-        # Открываем шаблон файл экселя для записи статистики.
-        wb = load_workbook('excel/template.xlsx')
-        sheet = wb.active
-
-        start = 'A3'
-        end = f'G{len(yd_statistics) + 3}'
-
-        # Цикл для статистики по Яндексу.
-        for cellObj, stat in zip(sheet[start:end], yd_statistics):
-            for index, (cell, s) in enumerate(zip(cellObj, stat)):
-                # 0 - Регион
-                # 2 - Сайт
-                if index == 0 or index == 2:
-                    cell.value = s
-
-                # 1 - Запрос. Если результатов нет, то красим ячейку в красный.
-                elif index == 1:
-                    if stat[6] == 'Результатов нет':
-                        cell.fill = PatternFill(start_color='da9694', fill_type='solid')
-                    cell.value = s
-
-                # 3, 4, 5 - Значения позиций на странице. Если объявления нет, то ставит прочерк.
-                elif index == 3 or index == 4 or index == 5:
-                    if s[1] == 0:
-                        cell.value = '-'
-                    else:
-                        cell.value = s[1]
-
-                # 6 - Гиперссылка на скриншот
-                elif index == 6:
-                    cell.value = s
-                    cell.hyperlink = s
-                    cell.style = 'Hyperlink'
-
-        start = 'H3'
-        end = f'N{len(gl_statistics) + 3}'
-
-        # Цикл для статистики по Гуглу.
-        for cellObj, stat in zip(sheet[start:end], gl_statistics):
-            for index, (cell, s) in enumerate(zip(cellObj, stat)):
-                # 0 - Регион
-                # 2 - Сайт
-                if index == 0 or index == 2:
-                    cell.value = s
-
-                # 1 - Запрос. Если результатов нет, то красим ячейку в красный.
-                elif index == 1:
-                    if stat[6] == 'Результатов нет':
-                        cell.fill = PatternFill(start_color='da9694', fill_type='solid')
-                    cell.value = s
-
-                # 3, 4, 5 - Значения позиций на странице. Если объявления нет, то ставит прочерк.
-                elif index == 3 or index == 4 or index == 5:
-                    if s[1] == 0:
-                        cell.value = '-'
-                    else:
-                        cell.value = s[1]
-
-                # 6 - Гиперссылка на скриншот
-                elif index == 6:
-                    cell.value = s
-                    cell.hyperlink = s
-                    cell.style = 'Hyperlink'
-
-        wb.save('{0}\\statistics.xlsx'.format(main_folder_path))
-        wb.close()
-
-    # Открывает папку, куда указал пользователь.
-    # TODO Функцию можно убрать в отдельный файл или вынести за пределы класса.
-    def open_folder(self, main_folder_path):
-        main_folder_path = main_folder_path.replace('/', '\\')
-        os.system('explorer "{0}"'.format(main_folder_path))
-
-    # Открывает excel файл со статистикой.
-    # TODO Функцию можно убрать в отдельный файл или вынести за пределы класса.
-    def open_excel_file(self, main_folder_path):
-        main_folder_path = main_folder_path.replace('/', '\\')
-        os.system('explorer "{0}\\statistics.xlsx"'.format(main_folder_path))
 
     # Начинает поток.
     def start_search(self):
@@ -630,7 +416,6 @@ class MyWin(QMainWindow):
         print(self.save_path)
 
         # Путь для создания папки со скриншотами.
-        folder_name = ''
         if len(sites_addresses) == 0:
             folder_name = 'adhunter'
         else:
@@ -763,12 +548,13 @@ class MyWin(QMainWindow):
                                 os.makedirs(f'{main_folder_path}\\{search}\\{region}')
 
                             # Имя скрина.
-                            screen_name = f'{main_folder_path}\\{search}\\{region}\\{search}_{region}_{request}_special_screen.png'
+                            screen_name = f'{main_folder_path}\\{search}\\{region}\\{search}_{region}_{request}' \
+                                          f'_special_screen.png'
                             print(screen_name)
                             sleep(1)
 
                             # Делаем скрин с помощью Pillow.
-                            img = ImageGrab.grab().save(screen_name, 'PNG')
+                            ImageGrab.grab().save(screen_name, 'PNG')
                             img = Image.open(screen_name)
 
                             # Отрезает верхнюю часть, где находится адресная строка, оставляет всё что ниже.
@@ -791,7 +577,8 @@ class MyWin(QMainWindow):
                                 os.makedirs(f'{main_folder_path}\\{search}\\{region}')
 
                             # Имя скрина.
-                            screen_name = f'{main_folder_path}\\{search}\\{region}\\{search}_{region}_{request}_garant_screen.png'
+                            screen_name = f'{main_folder_path}\\{search}\\{region}\\{search}_{region}_{request}' \
+                                          f'_garant_screen.png'
                             print(screen_name)
 
                             # Скрипт, чтобы проскролить до первого объявления в гаранте.
@@ -800,7 +587,7 @@ class MyWin(QMainWindow):
                             sleep(1)
 
                             # Делаем скрин.
-                            img = ImageGrab.grab().save(screen_name, 'PNG')
+                            ImageGrab.grab().save(screen_name, 'PNG')
                             img = Image.open(screen_name)
 
                             # Отрезает верхнюю часть, где находится адресная строка, оставляет всё что ниже.
@@ -854,12 +641,13 @@ class MyWin(QMainWindow):
                                             os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
 
                                         # Имя скрина.
-                                        screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_window_screen.png'
+                                        screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\' \
+                                                      f'{search}_{region}_{request}_{site_address}_window_screen.png'
                                         print(screen_name)
                                         sleep(1)
 
                                         # Делаем скрин.
-                                        img = ImageGrab.grab().save(screen_name, 'PNG')
+                                        ImageGrab.grab().save(screen_name, 'PNG')
                                         img = Image.open(screen_name)
 
                                         # Отрезает верхнюю часть, где находится адресная строка, оставляет всё что ниже.
@@ -870,9 +658,11 @@ class MyWin(QMainWindow):
                                             # Скроллит к объявлению.
                                             if not self.ui.checkBox_WithoutScrollDown.isChecked():
                                                 self.ui.label_Info.setText(
-                                                    'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region,
-                                                                                                               request,
-                                                                                                               site_address))
+                                                    'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(
+                                                        region,
+                                                        request,
+                                                        site_address)
+                                                )
                                                 draw = ImageDraw.Draw(new_img)
 
                                                 # Выделяем рамкой объявление.
@@ -896,9 +686,11 @@ class MyWin(QMainWindow):
                                             # Без скролла к объявлению.
                                             elif self.ui.checkBox_WithoutScrollDown.isChecked():
                                                 self.ui.label_Info.setText(
-                                                    'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(region,
-                                                                                                               request,
-                                                                                                               site_address))
+                                                    'Выполняю запрос: {0} - {1} - {2}. Рисую на скрине'.format(
+                                                        region,
+                                                        request,
+                                                        site_address)
+                                                )
                                                 draw = ImageDraw.Draw(new_img)
 
                                                 # Рисуем рамку.
@@ -911,7 +703,8 @@ class MyWin(QMainWindow):
 
                                         # Рисуем нумерацию.
                                         font = ImageFont.truetype(FONT, 25)
-                                        if self.ui.checkBox_WithoutScrollDown.isChecked() and self.ui.checkBox_Numeration.isChecked():
+                                        if self.ui.checkBox_WithoutScrollDown.isChecked() and \
+                                                self.ui.checkBox_Numeration.isChecked():
                                             # Черная нумерация для всех позиций.
                                             for result in results:
                                                 draw.text((result[2]['x'] - 100, result[2]['y']), str(result[0]),
@@ -933,7 +726,8 @@ class MyWin(QMainWindow):
                                                           font=font)
 
                                         # Тут с поправкой на был ли скролл к объявлению или нет.
-                                        elif not self.ui.checkBox_WithoutScrollDown.isChecked() and self.ui.checkBox_Numeration.isChecked():
+                                        elif not self.ui.checkBox_WithoutScrollDown.isChecked() and \
+                                                self.ui.checkBox_Numeration.isChecked():
                                             results = results[i:]
                                             for result in results:
                                                 if result[0] != 1 and search != 'google':
@@ -963,10 +757,11 @@ class MyWin(QMainWindow):
                                                 f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
                                             os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
 
-                                        screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_full_screen.png'
+                                        screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\' \
+                                                      f'{search}_{region}_{request}_{site_address}_full_screen.png'
                                         print(screen_name)
 
-                                        # Делаем скриншот с помощью webdriver'a так как он делает скрин всей страницы,
+                                        # Делаем скриншот с помощью webdriver так как он делает скрин всей страницы,
                                         # но без панели пуск.
                                         driver.save_screenshot(screen_name)
 
@@ -1003,11 +798,12 @@ class MyWin(QMainWindow):
                                                 f'{main_folder_path}\\{search}\\{site_address}\\{region}'):
                                             os.makedirs(f'{main_folder_path}\\{search}\\{site_address}\\{region}')
 
-                                        screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\{search}_{region}_{request}_{site_address}_only_ad_screen.png'
+                                        screen_name = f'{main_folder_path}\\{search}\\{site_address}\\{region}\\' \
+                                                      f'{search}_{region}_{request}_{site_address}_only_ad_screen.png'
                                         print(screen_name)
                                         sleep(1)
                                         # скрин
-                                        img = ImageGrab.grab().save(screen_name, 'PNG')
+                                        ImageGrab.grab().save(screen_name, 'PNG')
                                         img = Image.open(screen_name)
 
                                         # Отрезает верхнюю часть, где находится адресная строка, оставляет всё что ниже.
