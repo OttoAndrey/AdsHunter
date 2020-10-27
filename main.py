@@ -339,8 +339,8 @@ class MyWin(QMainWindow):
                 city = self.ui.tableWidget.cellWidget(row, 0).text()
                 lr = self.ui.tableWidget.item(row, 1).text()
                 regions[city] = lr
-            except:
-                pass
+            except Exception as e:
+                print(e)
 
         if len(regions.items()) == 0:
             regions['current'] = ''
@@ -357,8 +357,8 @@ class MyWin(QMainWindow):
                 city = self.ui.tableWidget_Google.cellWidget(row, 0).text()
                 uule = self.gl_regions[city]
                 regions[city] = uule
-            except:
-                pass
+            except Exception as e:
+                print(e)
         if len(regions.items()) == 0:
             regions['current'] = ''
 
