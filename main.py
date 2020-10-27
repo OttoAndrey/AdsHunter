@@ -5,14 +5,14 @@ from functools import partial
 from time import sleep
 
 from PIL import Image, ImageDraw, ImageFont, ImageGrab
-from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import QThread
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QCompleter, QTableWidgetItem, QDesktopWidget, QMainWindow, QWidget
 from selenium import webdriver
 
 from interface import Ui_MainWindow
-from other_fucntions import *
+from files.scripts.other_fucntions import *
 from settings import *
 
 
@@ -66,11 +66,11 @@ class MyWin(QMainWindow):
         # self.setWindowIcon(QIcon('pic/logo.png'))
 
         # Логотип в правом нижнем углу.
-        self.lbl = QtWidgets.QLabel(self)
+        # self.lbl = QtWidgets.QLabel(self)
         # self.pix = QtGui.QPixmap('pic/logo.png')
-        self.lbl.setPixmap(self.pix)
-        self.lbl.resize(500, 500)
-        self.lbl.move(1280, 600)
+        # self.lbl.setPixmap(self.pix)
+        # self.lbl.resize(500, 500)
+        # self.lbl.move(1280, 600)
 
         # Экземпляр потока.
         # Когда запускаем поиск, но он происходит в этом потоке.
@@ -88,7 +88,7 @@ class MyWin(QMainWindow):
         self.ui.tableWidget.setRowCount(5)
 
         # Словарь с регионами Гугла из эксель файла.
-        self.gl_regions = self.get_gl_regions()
+        self.gl_regions = get_gl_regions()
         print(self.gl_regions)
 
         # Настройки завершателя слов для Гугла.
@@ -97,7 +97,7 @@ class MyWin(QMainWindow):
         completer_gl.setCaseSensitivity(False)
 
         # Массив с регионами Яндекса из эксель файла.
-        self.yd_regions = self.get_yd_regions()
+        self.yd_regions = get_yd_regions()
         print(self.yd_regions)
 
         # Настройки завершателя слов для Яндекса.
@@ -315,7 +315,7 @@ class MyWin(QMainWindow):
         lr = 'None'
         region = cell.text()
 
-        wb = load_workbook('excel/regions.xlsx')
+        wb = load_workbook('files/excel/regions.xlsx')
         sheet = wb.active
 
         column_regions = sheet['B']
@@ -381,11 +381,11 @@ class MyWin(QMainWindow):
         self.ui.label_Info.setText('Программа выполняется. Подождите...')
 
         # Адреса сайтов, который ввел пользователь.
-        sites_addresses = self.get_sites_addresses(self.ui.textEdit_SitesAddresses.toPlainText())
+        sites_addresses = get_sites_addresses(self.ui.textEdit_SitesAddresses.toPlainText())
         print(sites_addresses)
 
         # Массив с запросами для поиска.
-        user_requests = self.get_requests(self.ui.textEdit_Requests.toPlainText())
+        user_requests = get_requests(self.ui.textEdit_Requests.toPlainText())
         print(user_requests)
 
         # Словарь с регионами и кодами lr для Яндекса из таблицы, которую заполнил пользователь.
@@ -618,7 +618,7 @@ class MyWin(QMainWindow):
                                     if 'Яндекс.Маркет' in r.text and 'Реклама' in r.text:
                                         continue
                                     results.append((index, r.text, r.location, r.size))
-                                positions, block_of_ads = self.get_positions(results, site_address)
+                                positions, block_of_ads = get_positions(results, site_address)
 
                                 # В оконном режиме только спец размещение.
                                 for i in range(0, 4):
@@ -765,7 +765,7 @@ class MyWin(QMainWindow):
                                         # но без панели пуск.
                                         driver.save_screenshot(screen_name)
 
-                                        positions, block_of_ads = self.get_positions(results, site_address)
+                                        positions, block_of_ads = get_positions(results, site_address)
 
                                         # Рисуем на скрине.
                                         self.ui.label_Info.setText(
@@ -782,7 +782,7 @@ class MyWin(QMainWindow):
                                     if 'Яндекс.Маркет' in r.text and 'Реклама' in r.text:
                                         continue
                                     results.append((index, r.text, r.location, r.size))
-                                positions, block_of_ads = self.get_positions(results, site_address)
+                                positions, block_of_ads = get_positions(results, site_address)
 
                                 for i in range(0, len(web_results)):
                                     if site_address in web_results[i].text and (
@@ -843,7 +843,7 @@ class MyWin(QMainWindow):
         # Так как там нет определенного сайта.
         if not self.ui.radioButton_SpecialAndGarant.isChecked():
             self.ui.label_Info.setText('Собираю статистику в файл')
-            self.edit_file_stat(statistics, main_folder_path)
+            edit_file_stat(statistics, main_folder_path)
             print('записал стату в файл')
 
         # Закрывает процесс chromedriver.

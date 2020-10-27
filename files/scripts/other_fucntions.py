@@ -1,6 +1,6 @@
 import os
 import re
-
+from settings import *
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
@@ -72,7 +72,7 @@ def get_site_position(block, site_address):
 
 
 # Функция для определения позиций в спец/seo/гарант.
-def get_positions(self, results, site_address=None):
+def get_positions(results, site_address=None):
     special = []
     seo = []
     guaranteed = []
@@ -90,9 +90,9 @@ def get_positions(self, results, site_address=None):
             temp = True
             seo.append(result)
 
-    special_position = self.get_site_position(special, site_address)
-    seo_position = self.get_site_position(seo, site_address)
-    guaranteed_position = self.get_site_position(guaranteed, site_address)
+    special_position = get_site_position(special, site_address)
+    seo_position = get_site_position(seo, site_address)
+    guaranteed_position = get_site_position(guaranteed, site_address)
 
     positions = [special_position, seo_position, guaranteed_position]
     block_of_ads = [special, seo, guaranteed]
@@ -102,7 +102,7 @@ def get_positions(self, results, site_address=None):
 # Считывает из файла регионы гугла.
 # Возвращает словарь {название региона: код_для_урла}
 def get_gl_regions():
-    wb = load_workbook('excel/google_regions.xlsx')
+    wb = load_workbook(GL_REGIONS)
     sheet = wb.active
     regions_name = sheet['A']
     uule_code = sheet['B']
@@ -118,7 +118,7 @@ def get_gl_regions():
 # Считывает регионы для яндекса из файла.
 # Возвращает кортеж.
 def get_yd_regions():
-    wb = load_workbook('excel/regions.xlsx')
+    wb = load_workbook(YD_REGIONS)
     sheet = wb.active
     column_regions = sheet['B']
     regions = tuple(cell.value for cell in column_regions)
@@ -138,7 +138,7 @@ def edit_file_stat(statistics, main_folder_path):
             gl_statistics.append(stat)
 
     # Открываем шаблон файл экселя для записи статистики.
-    wb = load_workbook('excel/template.xlsx')
+    wb = load_workbook(XLSX_TEMPLATE)
     sheet = wb.active
 
     start = 'A3'
